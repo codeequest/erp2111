@@ -20,3 +20,34 @@ body {
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
 }
+
+/* Label printing: on a page that has a .print-area, print only that area (no sidebar / top bar). */
+@media print {
+  @page {
+    margin: 5mm;
+  }
+  body:has(.print-area) {
+    background: white;
+  }
+  body:has(.print-area) * {
+    visibility: hidden;
+  }
+  body:has(.print-area) .print-area,
+  body:has(.print-area) .print-area * {
+    visibility: visible;
+  }
+  body:has(.print-area) .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+  }
+  /* The app shell scrolls inside a fixed-height box; let the labels flow over several pages. */
+  body:has(.print-area) div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .print-area .label {
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,13 +1,14 @@
-import { Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
+import { RequestUser } from '../../common/types/request-user';
+import { CreateTaxRateDto, UpdateTaxRateDto } from './dto/tax-rate.dto';
 import { SettingsService } from './settings.service';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
- * Routes and permissions are final; replace notImplemented(...) with calls to
- * SettingsService and add DTOs (class-validator) for request bodies.
+ * Tax rates are implemented; company details and numbering still answer 501.
  */
 @ApiTags('Admin · Settings')
 @Controller('settings')
@@ -30,23 +31,27 @@ export class SettingsController {
 
   @Get('tax-rates')
   @RequirePermissions('admin.settings.manage')
-  @ApiOperation({ summary: 'List tax rates' })
+  @ApiOperation({ summary: 'List tax rates (with the company default)' })
   getTaxRates() {
-    return notImplemented('Admin · Settings: List tax rates');
+    return this.settingsService.listTaxRates();
   }
 
   @Post('tax-rates')
   @RequirePermissions('admin.settings.manage')
   @ApiOperation({ summary: 'Create a tax rate' })
-  taxRates() {
-    return notImplemented('Admin · Settings: Create a tax rate');
+  createTaxRate(@Body() dto: CreateTaxRateDto, @CurrentUser() user: RequestUser) {
+    return this.settingsService.createTaxRate(dto, user);
   }
 
   @Patch('tax-rates/:id')
   @RequirePermissions('admin.settings.manage')
-  @ApiOperation({ summary: 'Update a tax rate' })
-  updateTaxRates(@Param('id', ParseUUIDPipe) id: string) {
-    return notImplemented('Admin · Settings: Update a tax rate');
+  @ApiOperation({ summary: 'Update a tax rate (name, rate, active, default)' })
+  updateTaxRate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTaxRateDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.settingsService.updateTaxRate(id, dto, user);
   }
 
   @Get('sequences')
