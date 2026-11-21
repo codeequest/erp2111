@@ -239,12 +239,28 @@ model Category {
   @@map("categories")
 }
 
+enum ProductCondition {
+  NEW
+  USED
+}
+
 model Product {
   id          String   @id @default(uuid()) @db.Uuid
   sku         String   @unique
   barcode     String?  @unique
   name        String
   description String?
+  /// Scooter attributes (model level; stock is counted per product)
+  brand       String?
+  model       String?
+  /// Engine displacement in cc (null for electric)
+  engineCc    Int?     @map("engine_cc")
+  isElectric  Boolean  @default(false) @map("is_electric")
+  color       String?
+  modelYear   Int?     @map("model_year")
+  condition   ProductCondition @default(NEW)
+  /// Public path of the product photo, e.g. /scooters/imola-125.webp
+  imageUrl    String?  @map("image_url")
   categoryId  String?  @map("category_id") @db.Uuid
   /// Stock is always kept in the base unit
   baseUnitId  String   @map("base_unit_id") @db.Uuid
@@ -274,6 +290,7 @@ model Product {
 
   @@index([name])
   @@index([categoryId])
+  @@index([brand, model])
   @@map("products")
 }
 
