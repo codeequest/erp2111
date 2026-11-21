@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
@@ -18,6 +18,8 @@ import { useAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/use-api-data';
 import { categoryOptionLabel, flattenCategories, formatDecimal, isBelow } from '@/lib/inventory';
 import { CatalogHeader } from '@/components/inventory/catalog-header';
+import { ExportMenu } from '@/components/export-menu';
+import { exportRows, fetchAllPages, FMT, type ExportColumn, type ExportFormat } from '@/lib/export';
 import {
   AccessDenied,
   EmptyState,
@@ -25,6 +27,7 @@ import {
   inputClass,
   PrimaryLink,
   SkeletonRows,
+  Toast,
 } from '@/components/ui';
 
 type Status = 'active' | 'inactive' | 'all';
@@ -48,6 +51,9 @@ export default function ProductsPage() {
   const [categoryId, setCategoryId] = useState('');
   const [status, setStatus] = useState<Status>('active');
   const [page, setPage] = useState(1);
+  const [toast, setToast] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const clearToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 250);
@@ -70,6 +76,40 @@ export default function ProductsPage() {
 
   if (!canRead) return <AccessDenied permission="inventory.product.read" what="products" />;
 
+  /** Every product matching the current filters (all pages), in the chosen format. */
+  async function exportProducts(format: ExportFormat): Promise<number> {
+    setExportError(null);
+    const params = new URLSearchParams({ status });
+    if (debounced) params.set('q', debounced);
+    if (categoryId) params.set('categoryId', categoryId);
+    const { items } = await fetchAllPages<ProductListItem>(`/inventory/products?${params}`, 100);
+    const columns: ExportColumn<ProductListItem>[] = [
+      { header: 'SKU', value: (p) => p.sku, width: 18 },
+      { header: 'Barcode', value: (p) => p.barcode, width: 16 },
+      { header: 'Name', value: (p) => p.name, width: 36 },
+      { header: 'Category', value: (p) => p.category?.name, width: 20 },
+      { header: 'Base unit', value: (p) => p.baseUnit.code },
+      { header: 'Sale price', value: (p) => p.salePrice, type: 'number', numFmt: FMT.cost },
+    ];
+    if (showCost) {
+      columns.push({
+        header: 'Average cost',
+        value: (p) => p.averageCost,
+        type: 'number',
+        numFmt: FMT.cost,
+      });
+    }
+    if (showStock) {
+      columns.push({ header: 'On hand', value: (p) => p.onHand, type: 'number', numFmt: FMT.qty });
+    }
+    columns.push(
+      { header: 'Min. stock', value: (p) => p.minStock, type: 'number', numFmt: FMT.qty },
+      { header: 'Status', value: (p) => (p.isActive ? 'Active' : 'Inactive') },
+    );
+    await exportRows({ format, fileName: 'products', sheetName: 'Products', columns, rows: items });
+    return items.length;
+  }
+
   const filtered = Boolean(debounced || categoryId || status !== 'active');
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const newButton = canWrite && (
@@ -88,6 +128,7 @@ export default function ProductsPage() {
       />
 
       {error && <ErrorBanner message={error} onRetry={reload} />}
+      {exportError && <ErrorBanner message={exportError} />}
 
       <section
         className="animate-fade-up overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"
@@ -133,11 +174,23 @@ export default function ProductsPage() {
               </button>
             ))}
           </div>
-          {data && (
-            <span className="ml-auto hidden text-xs text-slate-500 md:block">
-              {data.total.toLocaleString()} {data.total === 1 ? 'product' : 'products'}
-            </span>
-          )}
+          <div className="ml-auto flex items-center gap-3">
+            {data && (
+              <span className="hidden text-xs text-slate-500 md:block">
+                {data.total.toLocaleString()} {data.total === 1 ? 'product' : 'products'}
+              </span>
+            )}
+            <ExportMenu
+              onExport={exportProducts}
+              disabled={!data || data.total === 0}
+              onDone={(n, f) =>
+                setToast(
+                  `${n} ${n === 1 ? 'product' : 'products'} exported to ${f === 'xlsx' ? 'Excel' : 'CSV'}`,
+                )
+              }
+              onError={setExportError}
+            />
+          </div>
         </div>
 
         {loading && !data ? (
@@ -280,6 +333,8 @@ export default function ProductsPage() {
           </div>
         )}
       </section>
+
+      <Toast message={toast} onDone={clearToast} />
     </div>
   );
 }
