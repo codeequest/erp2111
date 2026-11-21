@@ -38,15 +38,29 @@ export const NAVIGATION: NavModule[] = [
   },
   {
     key: 'inventory',
-    label: 'Inventory',
-    description: 'Products, warehouses and stock',
+    label: 'Products',
+    description: 'Product catalogue',
     items: [
       {
         key: 'products',
         label: 'Products',
         href: '/inventory/products',
         permission: 'inventory.product.read',
-        description: 'Product catalogue, categories and units',
+        description: 'Product catalogue, prices and VAT',
+      },
+      {
+        key: 'categories',
+        label: 'Categories',
+        href: '/inventory/categories',
+        permission: 'inventory.product.read',
+        description: 'Product families and sub-families',
+      },
+      {
+        key: 'units',
+        label: 'Units',
+        href: '/inventory/units',
+        permission: 'inventory.product.read',
+        description: 'Units of measure and packagings',
       },
       {
         key: 'stock',
@@ -212,6 +226,23 @@ export const NAVIGATION: NavModule[] = [
     ],
   },
 ];
+
+/**
+ * Menu entries currently built and shown. The others (stock, purchasing, sales,
+ * invoicing, administration) stay defined above but are hidden until built.
+ */
+export const ENABLED_NAV_ITEMS: readonly string[] = [
+  'dashboard',
+  'products',
+  'categories',
+  'units',
+];
+
+/** NAVIGATION without hidden entries (and without modules left empty). */
+export const VISIBLE_NAVIGATION: NavModule[] = NAVIGATION.map((m) => ({
+  ...m,
+  items: m.items.filter((i) => ENABLED_NAV_ITEMS.includes(i.key)),
+})).filter((m) => m.items.length > 0);
 
 /** Find the menu entry for a URL path (exact match or a sub-path of it). */
 export function findNavItem(pathname: string): { module: NavModule; item: NavItem } | undefined {

@@ -47,7 +47,10 @@ export function refreshSession(): Promise<AuthResponse | null> {
 
 export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // JSON by default; FormData (file uploads) lets the browser set multipart itself.
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });
@@ -64,4 +67,27 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** Downloads a file from the API (e.g. a CSV export) with the user's session. */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const send = () =>
+    fetch(`${BASE}${path}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: 'include',
+    });
+  let res = await send();
+  if (res.status === 401 && (await refreshSession())) res = await send();
+  if (!res.ok) {
+    const body = (await res.json().catch(() => undefined)) as ApiError | undefined;
+    throw new ApiRequestError(res.status, body);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
