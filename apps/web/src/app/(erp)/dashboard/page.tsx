@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
@@ -17,8 +18,20 @@ import {
 import { NAVIGATION, type PermissionCode } from '@erp/shared';
 import { useAuth } from '@/lib/auth';
 import { ITEM_ICONS, MODULE_COLORS, MODULE_ICONS } from '@/components/icons';
+import {
+  getDashboardSummary,
+  getLowStock,
+  type DashboardSummary,
+  type LowStockItem,
+} from '@/lib/dashboard';
+import { fmtQty, listExpiringLots, type ExpiringLot } from '@/lib/inventory';
+import { ExpiryBadge } from '@/components/inventory/expiry-badge';
 
 interface Kpi {
+  /** Field of the summary that holds the value, when the module is built */
+  key?: keyof DashboardSummary;
+  /** Where clicking the tile goes */
+  href?: string;
   label: string;
   icon: LucideIcon;
   hint: string;
@@ -35,6 +48,8 @@ const KPIS: Kpi[] = [
     permission: 'sales.order.read',
   },
   {
+    key: 'lowStockCount',
+    href: '/inventory/products?lowStock=1',
     label: 'Low-stock items',
     icon: AlertTriangle,
     hint: 'Inventory module',
@@ -90,6 +105,26 @@ export default function DashboardPage() {
   const kpis = KPIS.filter((k) => can(k.permission));
   const actions = QUICK_ACTIONS.filter((a) => can(a.permission));
   const firstName = user?.fullName.split(' ')[0];
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [lowStock, setLowStock] = useState<LowStockItem[] | null>(null);
+  const [expiring, setExpiring] = useState<ExpiringLot[] | null>(null);
+  const canSummary = can('dashboard.summary.view');
+  const canStock = can('inventory.stock.read');
+
+  useEffect(() => {
+    if (!canSummary) return;
+    getDashboardSummary()
+      .then(setSummary)
+      .catch(() => undefined);
+    if (canStock) {
+      getLowStock()
+        .then(setLowStock)
+        .catch(() => undefined);
+      listExpiringLots(30)
+        .then((l) => setExpiring(l.slice(0, 10)))
+        .catch(() => undefined);
+    }
+  }, [canSummary, canStock]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -107,16 +142,133 @@ export default function DashboardPage() {
 
       {kpis.length > 0 && (
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((kpi) => (
-            <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500">{kpi.label}</p>
-                <kpi.icon className="size-5 text-slate-400" />
+          {kpis.map((kpi) => {
+            const value = kpi.key && summary ? summary[kpi.key] : null;
+            const live = value !== null && value !== undefined;
+            const alert = kpi.key === 'lowStockCount' && Number(value) > 0;
+            const body = (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-slate-500">{kpi.label}</p>
+                  <kpi.icon
+                    className={clsx('size-5', alert ? 'text-amber-500' : 'text-slate-400')}
+                  />
+                </div>
+                <p
+                  className={clsx(
+                    'mt-3 text-3xl font-semibold',
+                    !live ? 'text-slate-300' : alert ? 'text-amber-600' : 'text-slate-900',
+                  )}
+                >
+                  {live ? value : '—'}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {live
+                    ? alert
+                      ? 'At or below their minimum — click to see them'
+                      : 'All products above their minimum'
+                    : kpi.key && !summary
+                      ? 'Loading…'
+                      : `Available once the ${kpi.hint} is built`}
+                </p>
+              </>
+            );
+            return live && kpi.href ? (
+              <Link
+                key={kpi.label}
+                href={kpi.href}
+                className={clsx(
+                  'rounded-xl border bg-white p-5 transition hover:shadow-sm',
+                  alert
+                    ? 'border-amber-300 hover:border-amber-400'
+                    : 'border-slate-200 hover:border-slate-300',
+                )}
+              >
+                {body}
+              </Link>
+            ) : (
+              <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-5">
+                {body}
               </div>
-              <p className="mt-3 text-3xl font-semibold text-slate-300">—</p>
-              <p className="mt-1 text-xs text-slate-400">Available once the {kpi.hint} is built</p>
-            </div>
-          ))}
+            );
+          })}
+        </section>
+      )}
+
+      {expiring && expiring.length > 0 && (
+        <section className="rounded-xl border border-red-200 bg-white">
+          <div className="flex items-center justify-between border-b border-red-100 px-5 py-3">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+              <AlertTriangle className="size-4 text-red-500" /> Expiring lots
+              {summary?.expiredLotsCount ? (
+                <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                  {summary.expiredLotsCount} expired
+                </span>
+              ) : null}
+              {summary?.expiringLotsCount ? (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  {summary.expiringLotsCount} within 30 days
+                </span>
+              ) : null}
+            </h2>
+            <Link
+              href="/inventory/products?expiring=1"
+              className="text-sm font-medium text-blue-600 hover:underline"
+            >
+              See products
+            </Link>
+          </div>
+          <ul className="divide-y divide-slate-100 text-sm">
+            {expiring.map((l) => (
+              <li key={l.id}>
+                <Link
+                  href={`/inventory/products/${l.product.id}`}
+                  className="flex flex-wrap items-center gap-3 px-5 py-2.5 hover:bg-slate-50"
+                >
+                  <span className="font-medium text-slate-800">{l.product.name}</span>
+                  <span className="font-mono text-xs text-slate-400">lot {l.lotNumber}</span>
+                  <span className="ml-auto flex items-center gap-4">
+                    <span className="text-slate-600 tabular-nums">
+                      {fmtQty(l.quantity)} {l.product.baseUnit.code}
+                    </span>
+                    <ExpiryBadge date={l.expiryDate} />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {lowStock && lowStock.length > 0 && (
+        <section className="rounded-xl border border-amber-200 bg-white">
+          <div className="flex items-center justify-between border-b border-amber-100 px-5 py-3">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+              <AlertTriangle className="size-4 text-amber-500" /> Low stock
+            </h2>
+            <Link
+              href="/inventory/products?lowStock=1"
+              className="text-sm font-medium text-blue-600 hover:underline"
+            >
+              See all
+            </Link>
+          </div>
+          <ul className="divide-y divide-slate-100 text-sm">
+            {lowStock.map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/inventory/products/${p.id}`}
+                  className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50"
+                >
+                  <span className="font-mono text-xs text-slate-400">{p.sku}</span>
+                  <span className="font-medium text-slate-800">{p.name}</span>
+                  <span className="ml-auto text-amber-600 tabular-nums">
+                    {fmtQty(p.onHand)} / {fmtQty(p.minStock)} {p.unit}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

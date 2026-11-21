@@ -3,22 +3,26 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
 import { InventoryService } from './inventory.service';
+import { StockService } from './stock.service';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
+ * Listing is implemented; create / update still answer 501.
  * Routes and permissions are final; replace notImplemented(...) with calls to
  * InventoryService and add DTOs (class-validator) for request bodies.
  */
 @ApiTags('Inventory · Warehouses')
 @Controller('inventory/warehouses')
 export class WarehousesController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly inventoryService: InventoryService,
+    private readonly stockService: StockService,
+  ) {}
 
   @Get()
   @RequirePermissions('inventory.stock.read')
   @ApiOperation({ summary: 'List warehouses' })
   findAll() {
-    return notImplemented('Inventory · Warehouses: List warehouses');
+    return this.stockService.listWarehouses();
   }
 
   @Post()

@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  BarChart3,
   Boxes,
   Building2,
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   type LucideIcon,
   Package,
   PackageCheck,
+  Percent,
   Receipt,
   ReceiptText,
   Settings,
@@ -45,6 +47,8 @@ export const ITEM_ICONS: Record<string, LucideIcon> = {
   payments: Wallet,
   users: UserCog,
   roles: ShieldCheck,
+  'tax-rates': Percent,
+  'sales-stats': BarChart3,
   settings: Settings,
   audit: History,
 };

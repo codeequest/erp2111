@@ -82,6 +82,7 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'purchasing.order.read',
       'sales.customer.read',
       'sales.order.read',
+      'sales.stats.view',
       'invoicing.invoice.read',
       'invoicing.invoice.write',
       'invoicing.invoice.post',

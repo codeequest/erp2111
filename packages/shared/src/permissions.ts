@@ -105,6 +105,11 @@ export const PERMISSION_DEFINITIONS = [
     module: 'sales',
     description: 'Confirm orders above the customer credit limit',
   },
+  {
+    code: 'sales.stats.view',
+    module: 'sales',
+    description: 'View sales statistics by month, quarter and year',
+  },
 
   // Invoicing
   {

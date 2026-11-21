@@ -146,6 +146,13 @@ export const NAVIGATION: NavModule[] = [
         permission: 'sales.return.create',
         description: 'Goods returned by customers',
       },
+      {
+        key: 'sales-stats',
+        label: 'Sales statistics',
+        href: '/sales/statistics',
+        permission: 'sales.stats.view',
+        description: 'Revenue, margin and best sellers by month, quarter and year',
+      },
     ],
   },
   {
@@ -194,6 +201,13 @@ export const NAVIGATION: NavModule[] = [
         href: '/admin/roles',
         permission: 'admin.roles.manage',
         description: 'Who can do what, per module',
+      },
+      {
+        key: 'tax-rates',
+        label: 'Tax rates (VAT)',
+        href: '/admin/tax-rates',
+        permission: 'admin.settings.manage',
+        description: 'VAT rates and the company default',
       },
       {
         key: 'settings',
