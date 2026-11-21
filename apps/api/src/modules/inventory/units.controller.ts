@@ -1,30 +1,28 @@
-import { Controller, Get, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { notImplemented } from '../../common/not-implemented';
-import { InventoryService } from './inventory.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequestUser } from '../../common/types/request-user';
+import { CategoriesService } from './categories.service';
+import { CreateUnitDto } from './dto/category.dto';
 
-/**
- * SKELETON — every endpoint answers 501 Not Implemented.
- * Routes and permissions are final; replace notImplemented(...) with calls to
- * InventoryService and add DTOs (class-validator) for request bodies.
- */
 @ApiTags('Inventory · Categories & units')
+@ApiBearerAuth()
 @Controller('inventory/units')
 export class UnitsController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(private readonly categories: CategoriesService) {}
 
   @Get()
   @RequirePermissions('inventory.product.read')
   @ApiOperation({ summary: 'List units of measure' })
   findAll() {
-    return notImplemented('Inventory · Categories & units: List units of measure');
+    return this.categories.listUnits();
   }
 
   @Post()
   @RequirePermissions('inventory.product.write')
   @ApiOperation({ summary: 'Create a unit' })
-  create() {
-    return notImplemented('Inventory · Categories & units: Create a unit');
+  create(@Body() dto: CreateUnitDto, @CurrentUser() user: RequestUser) {
+    return this.categories.createUnit(dto, user);
   }
 }
