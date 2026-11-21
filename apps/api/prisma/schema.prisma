@@ -255,13 +255,26 @@ model Product {
   /// Low-stock alert threshold (base unit)
   minStock    Decimal  @default(0) @map("min_stock") @db.Decimal(18, 4)
   isActive    Boolean  @default(true) @map("is_active")
+  /// Variants: a parent product (hasVariants = true) defines the options and holds
+  /// no stock. Each variant is a normal product row with parentId set, so stock,
+  /// purchasing and sales work on variants exactly like on simple products.
+  hasVariants    Boolean  @default(false) @map("has_variants")
+  parentId       String?  @map("parent_id") @db.Uuid
+  /// On a parent: [{ "name": "Size", "values": ["S", "M"] }, { "name": "Colour", "values": ["Red"] }]
+  variantOptions Json?    @map("variant_options")
+  /// On a variant: { "Size": "M", "Colour": "Red" }
+  variantValues  Json?    @map("variant_values")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   category Category? @relation(fields: [categoryId], references: [id])
   baseUnit Unit      @relation(fields: [baseUnitId], references: [id])
   taxRate  TaxRate?  @relation(fields: [taxRateId], references: [id])
+  parent   Product?  @relation("ProductVariants", fields: [parentId], references: [id])
+  variants Product[] @relation("ProductVariants")
 
+  images              ProductImage[]
+  prices              PriceListItem[]
   units               ProductUnit[]
   stockMoves          StockMove[]
   stockBalances       StockBalance[]
@@ -274,7 +287,57 @@ model Product {
 
   @@index([name])
   @@index([categoryId])
+  @@index([parentId])
   @@map("products")
+}
+
+/// Product pictures, stored on the API server disk (UPLOAD_DIR) and served under /api/v1/uploads.
+model ProductImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  /// Path relative to UPLOAD_DIR, e.g. "products/<productId>/<uuid>.jpg"
+  path      String
+  fileName  String   @map("file_name")
+  mimeType  String   @map("mime_type")
+  size      Int
+  isMain    Boolean  @default(false) @map("is_main")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+/// Named price lists, e.g. RETAIL and WHOLESALE. A product missing from a list
+/// falls back to Product.salePrice.
+model PriceList {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  items     PriceListItem[]
+  customers Customer[]
+
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  priceListId String   @map("price_list_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  /// Price per base unit
+  price       Decimal  @db.Decimal(18, 4)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([priceListId, productId])
+  @@index([productId])
+  @@map("price_list_items")
 }
 
 /// Alternative units for buying / selling, e.g. 1 CTN = 24 PCS (factor = 24).
@@ -407,11 +470,14 @@ model Customer {
   paymentTermDays Int      @default(0) @map("payment_term_days")
   /// null = no limit
   creditLimit     Decimal? @map("credit_limit") @db.Decimal(18, 2)
+  /// Price list used in this customer's quotations / orders (null = Product.salePrice)
+  priceListId     String?  @map("price_list_id") @db.Uuid
   notes           String?
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  priceList       PriceList?   @relation(fields: [priceListId], references: [id])
   salesOrders     SalesOrder[]
   customerReturns CustomerReturn[]
   invoices        Invoice[]

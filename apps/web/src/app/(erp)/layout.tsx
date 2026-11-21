@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { useAuth } from '@/lib/auth';
 import { Sidebar } from '@/components/sidebar';
 import { Topbar } from '@/components/topbar';
+import { ToastProvider } from '@/components/ui';
 
 /** Shell for every logged-in page: sidebar + top bar. Redirects to /login when signed out. */
 export default function ErpLayout({ children }: { children: React.ReactNode }) {
@@ -58,7 +59,9 @@ export default function ErpLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenu={() => setMenuOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <ToastProvider>{children}</ToastProvider>
+        </main>
       </div>
     </div>
   );
