@@ -1,13 +1,15 @@
-import { Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequestUser } from '../../common/types/request-user';
 import { notImplemented } from '../../common/not-implemented';
 import { SettingsService } from './settings.service';
+import { UpdateSequenceDto } from './dto/sequence.dto';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
- * Routes and permissions are final; replace notImplemented(...) with calls to
- * SettingsService and add DTOs (class-validator) for request bodies.
+ * Numbering (sequences) is implemented. Company details and tax rates are still
+ * SKELETONS answering 501: replace notImplemented(...) when you build them.
  */
 @ApiTags('Admin · Settings')
 @Controller('settings')
@@ -51,15 +53,21 @@ export class SettingsController {
 
   @Get('sequences')
   @RequirePermissions('admin.settings.manage')
-  @ApiOperation({ summary: 'List document numbering sequences' })
+  @ApiOperation({ summary: 'List numbering sequences (product codes + this year’s documents)' })
   getSequences() {
-    return notImplemented('Admin · Settings: List document numbering sequences');
+    return this.settingsService.listSequences();
   }
 
   @Patch('sequences/:id')
   @RequirePermissions('admin.settings.manage')
-  @ApiOperation({ summary: 'Update a numbering sequence prefix / padding' })
-  updateSequences(@Param('id', ParseUUIDPipe) id: string) {
-    return notImplemented('Admin · Settings: Update a numbering sequence prefix / padding');
+  @ApiOperation({
+    summary: 'Update a numbering sequence (prefix, digits, next number — documents only forward)',
+  })
+  updateSequences(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSequenceDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.settingsService.updateSequence(id, dto, user);
   }
 }

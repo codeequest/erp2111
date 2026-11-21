@@ -12,7 +12,8 @@ import { DEFAULT_ROLES, PERMISSION_DEFINITIONS } from '@erp/shared';
 
 const prisma = new PrismaClient();
 
-const SEQUENCE_PREFIXES: Record<DocumentType, string> = {
+/** Yearly document numbering (PO-2026-00001…). PRODUCT codes never reset: seeded separately. */
+const SEQUENCE_PREFIXES: Record<Exclude<DocumentType, 'PRODUCT'>, string> = {
   PURCHASE_ORDER: 'PO',
   GOODS_RECEIPT: 'GR',
   QUOTATION: 'QUO',
@@ -101,6 +102,14 @@ async function seedReferenceData() {
     create: { code: 'PCS', name: 'Piece' },
   });
 
+  // Neutral default so product forms have a choice; the real VAT rate(s) are
+  // still an open question for the owner (design doc §12) and set in Settings.
+  await prisma.taxRate.upsert({
+    where: { name: 'Exempt' },
+    update: {},
+    create: { name: 'Exempt', rate: 0 },
+  });
+
   await prisma.warehouse.upsert({
     where: { code: 'MAIN' },
     update: {},
@@ -108,6 +117,14 @@ async function seedReferenceData() {
   });
 
   const year = new Date().getFullYear();
+  // Automatic article codes: ART-00001, ART-00002… (year 0 = never resets).
+  // The admin can change prefix / digits / next number from the Products screen.
+  await prisma.documentSequence.upsert({
+    where: { docType_year: { docType: 'PRODUCT', year: 0 } },
+    update: {},
+    create: { docType: 'PRODUCT', year: 0, prefix: 'ART-', padding: 5 },
+  });
+
   for (const [docType, prefix] of Object.entries(SEQUENCE_PREFIXES) as [DocumentType, string][]) {
     await prisma.documentSequence.upsert({
       where: { docType_year: { docType, year } },
@@ -115,7 +132,7 @@ async function seedReferenceData() {
       create: { docType, year, prefix },
     });
   }
-  console.log('✔ company settings, unit PCS, warehouse MAIN, document sequences');
+  console.log('✔ company settings, unit PCS, tax rate Exempt, warehouse MAIN, document sequences');
 }
 
 async function main() {
