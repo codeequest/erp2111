@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ERP Architecture</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1e293b; margin: 0; font-size: 12px; }
+  .page { page-break-after: always; min-height: 180mm; position: relative; }
+  .page:last-child { page-break-after: auto; }
+  h1 { font-size: 30px; margin: 0 0 6px; color: #0f172a; }
+  h2 { font-size: 20px; margin: 0 0 4px; color: #0f172a; border-left: 5px solid #2563eb; padding-left: 10px; }
+  .sub { color: #64748b; margin: 0 0 14px 15px; font-size: 12px; }
+  .foot { position: absolute; bottom: 0; right: 0; color: #94a3b8; font-size: 10px; }
+
+  /* cover */
+  .cover { display: flex; flex-direction: column; justify-content: center; height: 180mm; padding: 0 30px; }
+  .cover .tag { color: #2563eb; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; font-size: 12px; }
+  .cover p.lead { font-size: 15px; color: #475569; max-width: 720px; line-height: 1.5; }
+  .stackrow { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+  .chip { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc; }
+  .chip b { display: block; font-size: 13px; color: #0f172a; }
+  .chip span { color: #64748b; font-size: 11px; }
+  .toc { margin-top: 26px; color: #475569; line-height: 1.8; font-size: 13px; }
+
+  /* org chart */
+  .org { display: flex; flex-direction: column; align-items: center; }
+  .root { background: #0f172a; color: #fff; padding: 10px 26px; border-radius: 8px; font-weight: 700; font-size: 15px; }
+  .vline { width: 2px; height: 16px; background: #94a3b8; }
+  .branches { display: flex; gap: 10px; position: relative; padding-top: 16px; width: 100%; justify-content: center; }
+  .branches::before { content: ""; position: absolute; top: 0; left: 8.3%; right: 8.3%; height: 2px; background: #94a3b8; }
+  .branch { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .branch::before { content: ""; position: absolute; top: -16px; width: 2px; height: 16px; background: #94a3b8; }
+  .node { width: 100%; border-radius: 8px; padding: 8px 10px; color: #fff; font-weight: 700; text-align: center; font-size: 13px; }
+  .node small { display: block; font-weight: 400; opacity: .85; font-size: 10px; }
+  .leaves { width: 100%; margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .leaf { border: 1px solid; border-left-width: 4px; border-radius: 5px; padding: 5px 7px; background: #fff; font-size: 11px; }
+  .leaf b { display: block; font-size: 11.5px; }
+  .leaf span { color: #64748b; font-size: 10px; }
+  .c-core { background: #475569; } .l-core { border-color: #475569; }
+  .c-inv { background: #059669; } .l-inv { border-color: #059669; }
+  .c-pur { background: #d97706; } .l-pur { border-color: #d97706; }
+  .c-sal { background: #2563eb; } .l-sal { border-color: #2563eb; }
+  .c-invc { background: #7c3aed; } .l-invc { border-color: #7c3aed; }
+  .c-dash { background: #db2777; } .l-dash { border-color: #db2777; }
+
+  /* table */
+  table { border-collapse: collapse; width: 100%; font-size: 11px; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 7px; text-align: left; vertical-align: top; }
+  th { background: #0f172a; color: #fff; }
+  td.role { font-weight: 700; background: #f1f5f9; white-space: nowrap; }
+  .full { color: #047857; font-weight: 700; } .none { color: #94a3b8; } .part { color: #b45309; }
+  .note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 11px; line-height: 1.5; }
+  .note.warn { background: #fffbeb; border-color: #fde68a; }
+
+  /* flow */
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 10px; }
+  .step { flex: 1; text-align: center; }
+  .step .box { margin: 0 4px; border-radius: 8px; padding: 10px 6px; color: #fff; font-weight: 700; font-size: 12px; min-height: 52px; display: flex; flex-direction: column; justify-content: center; }
+  .step .box small { font-weight: 400; font-size: 10px; opacity: .9; }
+  .step .eff { margin: 6px 4px 0; font-size: 10px; color: #334155; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 5px; padding: 5px; min-height: 46px; }
+  .arrow { align-self: flex-start; margin-top: 18px; color: #64748b; font-size: 18px; width: 14px; text-align: center; }
+  .lane { font-weight: 700; font-size: 12px; margin: 16px 0 2px; color: #0f172a; }
+
+  pre.tree { font-family: Consolas, monospace; font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; line-height: 1.45; margin: 0; }
+  .cols { display: flex; gap: 18px; }
+  .cols > div { flex: 1; }
+  ul.q { line-height: 1.6; font-size: 12px; padding-left: 18px; }
+</style>
+</head>
+<body>
+
+<!-- 1. COVER -->
+<section class="page">
+  <div class="cover">
+    <div class="tag">Architecture document · v0.1 draft · 21 Nov 2026</div>
+    <h1>ERP for a Trading / Retail Company</h1>
+    <p class="lead">A modular-monolith ERP for one company. It covers Inventory, Purchasing, Sales and Invoicing, with role-based access control per module.
+      One NestJS API with one internal module per business area serves the Next.js web interface. Everything is stored in PostgreSQL.</p>
+    <div class="stackrow">
+      <div class="chip"><b>Next.js + TypeScript</b><span>Web UI · Tailwind · shadcn/ui · TanStack</span></div>
+      <div class="chip"><b>NestJS + TypeScript</b><span>REST API · guards · Swagger</span></div>
+      <div class="chip"><b>PostgreSQL + Prisma</b><span>Transactions · migrations</span></div>
+      <div class="chip"><b>JWT + RBAC</b><span>Roles &amp; permissions per module</span></div>
+      <div class="chip"><b>Docker · pnpm monorepo</b><span>apps/web · apps/api · packages/shared</span></div>
+    </div>
+    <div class="toc">
+      1 · Technical architecture &nbsp;·&nbsp; 2 · Functional organigramme (modules) &nbsp;·&nbsp; 3 · Roles &amp; permissions<br>
+      4 · Business flow &amp; stock effects &nbsp;·&nbsp; 5 · Project structure &amp; build order &nbsp;·&nbsp; 6 · Open questions
+    </div>
+  </div>
+</section>
+
+<!-- 2. TECHNICAL ARCHITECTURE -->
+<section class="page">
+  <h2>1 · Technical architecture</h2>
+  <p class="sub">Three tiers. The API is the only component that talks to the database, and it enforces every permission.</p>
+  <svg viewBox="0 0 1060 560" width="100%" style="max-height:165mm">
+    <defs>
+      <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+    </defs>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; }
+      .t { font-size: 14px; font-weight: 700; fill: #0f172a; }
+      .s { font-size: 11px; fill: #475569; }
+      .w { font-size: 12px; font-weight: 700; fill: #fff; }
+      .ws { font-size: 10px; fill: #fff; }
+    </style>
+
+    <!-- Users -->
+    <rect x="300" y="8" width="460" height="58" rx="10" fill="#f1f5f9" stroke="#94a3b8"/>
+    <text x="530" y="31" text-anchor="middle" class="t">Staff (web browser)</text>
+    <text x="530" y="51" text-anchor="middle" class="s">Admin · Sales clerk · Purchaser · Storekeeper · Accountant · Viewer</text>
+    <line x1="530" y1="66" x2="530" y2="96" stroke="#64748b" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="540" y="86" class="s">HTTPS</text>
+
+    <!-- Next.js -->
+    <rect x="160" y="100" width="740" height="92" rx="10" fill="#fff" stroke="#0f172a" stroke-width="2"/>
+    <rect x="160" y="100" width="740" height="26" rx="10" fill="#0f172a"/>
+    <rect x="160" y="114" width="740" height="12" fill="#0f172a"/>
+    <text x="530" y="118" text-anchor="middle" class="w">FRONTEND · apps/web · Next.js (App Router)</text>
+    <g class="s">
+      <rect x="178" y="138" width="166" height="42" rx="6" fill="#f8fafc" stroke="#cbd5e1"/><text x="261" y="156" text-anchor="middle" class="s" font-weight="700">Pages per module</text><text x="261" y="171" text-anchor="middle" class="s">lists · forms · documents</text>
+      <rect x="356" y="138" width="166" height="42" rx="6" fill="#f8fafc" stroke="#cbd5e1"/><text x="439" y="156" text-anchor="middle" class="s" font-weight="700">UI kit</text><text x="439" y="171" text-anchor="middle" class="s">Tailwind · shadcn/ui · Tables</text>
+      <rect x="534" y="138" width="166" height="42" rx="6" fill="#f8fafc" stroke="#cbd5e1"/><text x="617" y="156" text-anchor="middle" class="s" font-weight="700">Data layer</text><text x="617" y="171" text-anchor="middle" class="s">TanStack Query · RHF + Zod</text>
+      <rect x="712" y="138" width="170" height="42" rx="6" fill="#f8fafc" stroke="#cbd5e1"/><text x="797" y="156" text-anchor="middle" class="s" font-weight="700">Session &amp; menu</text><text x="797" y="171" text-anchor="middle" class="s">hides what you can't access</text>
+    </g>
+    <line x1="530" y1="192" x2="530" y2="226" stroke="#64748b" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="540" y="214" class="s">REST / JSON · JWT access token + httpOnly refresh cookie</text>
+
+    <!-- NestJS -->
+    <rect x="60" y="230" width="940" height="236" rx="10" fill="#fff" stroke="#e11d48" stroke-width="2"/>
+    <rect x="60" y="230" width="940" height="26" rx="10" fill="#e11d48"/>
+    <rect x="60" y="244" width="940" height="12" fill="#e11d48"/>
+    <text x="530" y="248" text-anchor="middle" class="w">BACKEND · apps/api · NestJS (modular monolith)</text>
+
+    <!-- guards -->
+    <rect x="80" y="266" width="900" height="34" rx="6" fill="#fff1f2" stroke="#fda4af"/>
+    <text x="530" y="282" text-anchor="middle" class="s" font-weight="700">Request pipeline:  JWT Auth Guard  →  Permissions Guard @RequirePermissions('sales.order.confirm')  →  Validation (Zod)  →  Controller</text>
+    <text x="530" y="295" text-anchor="middle" class="s">Unauthorized → 401 · Missing permission → 403 · Every write → Audit log</text>
+
+    <!-- business modules -->
+    <g>
+      <rect x="80"  y="312" width="214" height="60" rx="8" fill="#059669"/><text x="187" y="336" text-anchor="middle" class="w">Inventory module</text><text x="187" y="354" text-anchor="middle" class="ws">products · warehouses · stock ledger</text>
+      <rect x="309" y="312" width="214" height="60" rx="8" fill="#d97706"/><text x="416" y="336" text-anchor="middle" class="w">Purchasing module</text><text x="416" y="354" text-anchor="middle" class="ws">suppliers · POs · receipts</text>
+      <rect x="538" y="312" width="214" height="60" rx="8" fill="#2563eb"/><text x="645" y="336" text-anchor="middle" class="w">Sales module</text><text x="645" y="354" text-anchor="middle" class="ws">customers · orders · deliveries</text>
+      <rect x="767" y="312" width="213" height="60" rx="8" fill="#7c3aed"/><text x="873" y="336" text-anchor="middle" class="w">Invoicing module</text><text x="873" y="354" text-anchor="middle" class="ws">invoices · bills · payments · PDFs</text>
+    </g>
+    <!-- core -->
+    <g>
+      <rect x="80"  y="382" width="214" height="34" rx="6" fill="#475569"/><text x="187" y="403" text-anchor="middle" class="w">Auth · Users · Roles</text>
+      <rect x="309" y="382" width="214" height="34" rx="6" fill="#475569"/><text x="416" y="403" text-anchor="middle" class="w">Settings · Numbering</text>
+      <rect x="538" y="382" width="214" height="34" rx="6" fill="#475569"/><text x="645" y="403" text-anchor="middle" class="w">Audit log</text>
+      <rect x="767" y="382" width="213" height="34" rx="6" fill="#db2777"/><text x="873" y="403" text-anchor="middle" class="w">Dashboard · Reports</text>
+    </g>
+    <rect x="80" y="424" width="900" height="30" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+    <text x="530" y="444" text-anchor="middle" class="s" font-weight="700">Prisma ORM · one DB transaction per stock / money operation</text>
+
+    <!-- DB -->
+    <line x1="530" y1="466" x2="530" y2="490" stroke="#64748b" stroke-width="2" marker-end="url(#ar)"/>
+    <ellipse cx="530" cy="500" rx="120" ry="10" fill="#bfdbfe" stroke="#1d4ed8"/>
+    <rect x="410" y="500" width="240" height="40" fill="#bfdbfe" stroke="none"/>
+    <line x1="410" y1="500" x2="410" y2="540" stroke="#1d4ed8"/><line x1="650" y1="500" x2="650" y2="540" stroke="#1d4ed8"/>
+    <ellipse cx="530" cy="540" rx="120" ry="10" fill="#bfdbfe" stroke="#1d4ed8"/>
+    <text x="530" y="526" text-anchor="middle" class="t">PostgreSQL</text>
+
+    <!-- shared package -->
+    <rect x="910" y="100" width="140" height="92" rx="10" fill="#fefce8" stroke="#ca8a04" stroke-dasharray="5 3"/>
+    <text x="980" y="124" text-anchor="middle" class="t" font-size="12">packages/shared</text>
+    <text x="980" y="144" text-anchor="middle" class="s">Zod schemas</text>
+    <text x="980" y="159" text-anchor="middle" class="s">TS types</text>
+    <text x="980" y="174" text-anchor="middle" class="s">permission codes</text>
+
+    <!-- docker -->
+    <text x="60" y="508" class="s" font-weight="700">Deployment</text>
+    <text x="60" y="524" class="s">Docker Compose (web + api + postgres)</text>
+    <text x="60" y="540" class="s">one cloud server · Swagger docs at /api/docs</text>
+  </svg>
+  <div class="foot">ERP Architecture · page 2</div>
+</section>
+
+<!-- 3. FUNCTIONAL ORGANIGRAMME -->
+<section class="page">
+  <h2>2 · Functional organigramme (modules)</h2>
+  <p class="sub">Each box is a NestJS module with its own menu section in the UI.</p>
+  <div class="org">
+    <div class="root">ERP System</div>
+    <div class="vline"></div>
+    <div class="branches">
+      <div class="branch">
+        <div class="node c-core">Core / Admin<small>platform</small></div>
+        <div class="leaves">
+          <div class="leaf l-core"><b>Authentication</b><span>login, JWT, refresh, logout</span></div>
+          <div class="leaf l-core"><b>Users</b><span>create, deactivate, reset password</span></div>
+          <div class="leaf l-core"><b>Roles &amp; permissions</b><span>role = bundle of permissions</span></div>
+          <div class="leaf l-core"><b>Settings</b><span>company, tax, currency, numbering</span></div>
+          <div class="leaf l-core"><b>Audit log</b><span>who did what, when</span></div>
+          <div class="leaf l-core"><b>CSV import</b><span>go-live data</span></div>
+        </div>
+      </div>
+      <div class="branch">
+        <div class="node c-inv">Inventory<small>stock</small></div>
+        <div class="leaves">
+          <div class="leaf l-inv"><b>Products</b><span>SKU, barcode, prices, tax, min level</span></div>
+          <div class="leaf l-inv"><b>Categories &amp; units</b><span>base unit + carton/piece factors</span></div>
+          <div class="leaf l-inv"><b>Warehouses</b><span>one or many locations</span></div>
+          <div class="leaf l-inv"><b>Stock ledger</b><span>every movement, never edited</span></div>
+          <div class="leaf l-inv"><b>Adjustments &amp; transfers</b><span>with reason</span></div>
+          <div class="leaf l-inv"><b>Low-stock alerts</b><span>weighted average cost</span></div>
+        </div>
+      </div>
+      <div class="branch">
+        <div class="node c-pur">Purchasing<small>buy</small></div>
+        <div class="leaves">
+          <div class="leaf l-pur"><b>Suppliers</b><span>contacts, payment terms</span></div>
+          <div class="leaf l-pur"><b>Purchase orders</b><span>draft → confirmed → received</span></div>
+          <div class="leaf l-pur"><b>Goods receipts</b><span>partial allowed · stock IN</span></div>
+          <div class="leaf l-pur"><b>Supplier balance</b><span>what we owe</span></div>
+        </div>
+      </div>
+      <div class="branch">
+        <div class="node c-sal">Sales<small>sell</small></div>
+        <div class="leaves">
+          <div class="leaf l-sal"><b>Customers</b><span>terms, credit limit</span></div>
+          <div class="leaf l-sal"><b>Quotations</b><span>convert to order</span></div>
+          <div class="leaf l-sal"><b>Sales orders</b><span>discounts, status flow</span></div>
+          <div class="leaf l-sal"><b>Deliveries</b><span>partial allowed · stock OUT</span></div>
+          <div class="leaf l-sal"><b>Returns</b><span>stock IN + credit note</span></div>
+        </div>
+      </div>
+      <div class="branch">
+        <div class="node c-invc">Invoicing<small>money</small></div>
+        <div class="leaves">
+          <div class="leaf l-invc"><b>Customer invoices</b><span>draft → posted → paid</span></div>
+          <div class="leaf l-invc"><b>Supplier bills</b><span>from POs / receipts</span></div>
+          <div class="leaf l-invc"><b>Payments</b><span>cash, transfer, cheque, card</span></div>
+          <div class="leaf l-invc"><b>Credit notes</b><span>posted docs are immutable</span></div>
+          <div class="leaf l-invc"><b>PDF documents</b><span>invoice, PO, delivery note</span></div>
+        </div>
+      </div>
+      <div class="branch">
+        <div class="node c-dash">Dashboard<small>insight</small></div>
+        <div class="leaves">
+          <div class="leaf l-dash"><b>Key figures</b><span>sales today / month</span></div>
+          <div class="leaf l-dash"><b>Top products</b><span>by revenue / qty</span></div>
+          <div class="leaf l-dash"><b>Low stock</b><span>to reorder</span></div>
+          <div class="leaf l-dash"><b>Unpaid / overdue</b><span>receivables, payables</span></div>
+          <div class="leaf l-dash"><b>CSV export</b><span>every list</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">ERP Architecture · page 3</div>
+</section>
+
+<!-- 4. ROLES -->
+<section class="page">
+  <h2>3 · Roles &amp; permissions (per module)</h2>
+  <p class="sub">User ⟷ Role ⟷ Permission (many-to-many). Permission codes look like <code>module.resource.action</code>. The admin can create new roles in the UI; these six are seeded.</p>
+
+  <svg viewBox="0 0 1060 150" width="100%">
+    <style>text{font-family:"Segoe UI",Arial,sans-serif}</style>
+    <rect x="20" y="45" width="190" height="60" rx="8" fill="#0f172a"/><text x="115" y="72" fill="#fff" font-size="14" font-weight="700" text-anchor="middle">USER</text><text x="115" y="90" fill="#cbd5e1" font-size="10" text-anchor="middle">can hold several roles</text>
+    <line x1="210" y1="75" x2="330" y2="75" stroke="#64748b" stroke-width="2"/><text x="270" y="68" font-size="10" fill="#475569" text-anchor="middle">N : N</text>
+    <rect x="330" y="45" width="190" height="60" rx="8" fill="#2563eb"/><text x="425" y="72" fill="#fff" font-size="14" font-weight="700" text-anchor="middle">ROLE</text><text x="425" y="90" fill="#dbeafe" font-size="10" text-anchor="middle">editable by admin</text>
+    <line x1="520" y1="75" x2="640" y2="75" stroke="#64748b" stroke-width="2"/><text x="580" y="68" font-size="10" fill="#475569" text-anchor="middle">N : N</text>
+    <rect x="640" y="45" width="190" height="60" rx="8" fill="#059669"/><text x="735" y="72" fill="#fff" font-size="14" font-weight="700" text-anchor="middle">PERMISSION</text><text x="735" y="90" fill="#d1fae5" font-size="10" text-anchor="middle">fixed codes, seeded</text>
+    <line x1="830" y1="75" x2="870" y2="75" stroke="#64748b" stroke-width="2"/>
+    <rect x="870" y="20" width="175" height="110" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="882" y="42" font-size="10" fill="#334155" font-family="Consolas,monospace">inventory.product.read</text>
+    <text x="882" y="60" font-size="10" fill="#334155" font-family="Consolas,monospace">inventory.cost.view</text>
+    <text x="882" y="78" font-size="10" fill="#334155" font-family="Consolas,monospace">sales.order.confirm</text>
+    <text x="882" y="96" font-size="10" fill="#334155" font-family="Consolas,monospace">invoicing.payment.record</text>
+    <text x="882" y="114" font-size="10" fill="#334155" font-family="Consolas,monospace">admin.roles.manage …</text>
+  </svg>
+
+  <table>
+    <tr><th>Default role</th><th>Inventory</th><th>Purchasing</th><th>Sales</th><th>Invoicing</th><th>Admin</th></tr>
+    <tr><td class="role">Admin</td><td class="full">Full + cost</td><td class="full">Full</td><td class="full">Full</td><td class="full">Full</td><td class="full">Users, roles, settings</td></tr>
+    <tr><td class="role">Sales clerk</td><td class="part">Read (no cost)</td><td class="none">—</td><td class="full">Quotes, orders, confirm, returns</td><td class="part">Read own invoices</td><td class="none">—</td></tr>
+    <tr><td class="role">Purchaser</td><td class="part">Read + cost</td><td class="full">Suppliers, POs, confirm</td><td class="none">—</td><td class="part">Read supplier bills</td><td class="none">—</td></tr>
+    <tr><td class="role">Storekeeper</td><td class="full">Adjust, transfer (no cost)</td><td class="part">Create receipts</td><td class="part">Create deliveries</td><td class="none">—</td><td class="none">—</td></tr>
+    <tr><td class="role">Accountant</td><td class="part">Read + cost</td><td class="part">Read</td><td class="part">Read</td><td class="full">Invoices, bills, payments, credit notes</td><td class="none">—</td></tr>
+    <tr><td class="role">Viewer</td><td class="part">Read (no cost)</td><td class="part">Read</td><td class="part">Read</td><td class="part">Read</td><td class="none">—</td></tr>
+  </table>
+  <div class="note"><b>Enforcement:</b> the API checks every request with a guard and a <code>@RequirePermissions()</code> decorator, and that check is the real security. The web UI also hides menus and buttons the user can't use, but only for convenience. Purchase cost and margin are returned only to users with <code>inventory.cost.view</code>. Users are deactivated rather than deleted, to keep history.</div>
+  <div class="foot">ERP Architecture · page 4</div>
+</section>
+
+<!-- 5. FLOW -->
+<section class="page">
+  <h2>4 · Business flow &amp; effect on stock and money</h2>
+  <p class="sub">Every arrow that moves goods writes a row to the stock ledger. Every document that moves money is numbered and can't be edited once posted.</p>
+
+  <div class="lane">Buying cycle (Purchasing → Inventory → Invoicing)</div>
+  <div class="flow">
+    <div class="step"><div class="box c-pur">Purchase order<small>draft → confirmed</small></div><div class="eff">No stock effect yet.<br>Number PO-2026-00001</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-pur">Goods receipt<small>partial allowed</small></div><div class="eff"><b>Stock IN</b> (+qty)<br>average cost updated</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-invc">Supplier bill<small>draft → posted</small></div><div class="eff">We owe the supplier.<br>Payable +</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-invc">Payment out<small>partial allowed</small></div><div class="eff">Payable −<br>bill → paid</div></div>
+  </div>
+
+  <div class="lane">Selling cycle (Sales → Inventory → Invoicing)</div>
+  <div class="flow">
+    <div class="step"><div class="box c-sal">Quotation<small>optional</small></div><div class="eff">No effect.</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-sal">Sales order<small>confirm: stock + credit check</small></div><div class="eff">Blocks if stock would go negative.<br>Warns on credit limit.</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-sal">Delivery<small>partial allowed</small></div><div class="eff"><b>Stock OUT</b> (−qty)</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-invc">Customer invoice<small>posted = immutable</small></div><div class="eff">Customer owes us.<br>Receivable +</div></div>
+    <div class="arrow">➜</div>
+    <div class="step"><div class="box c-invc">Payment in<small>cash / transfer / …</small></div><div class="eff">Receivable −<br>invoice → paid</div></div>
+  </div>
+
+  <div class="lane">Stock-only operations (Inventory)</div>
+  <div class="flow">
+    <div class="step"><div class="box c-inv">Opening balance<small>go-live import</small></div><div class="eff">Stock IN with cost</div></div>
+    <div class="arrow"> </div>
+    <div class="step"><div class="box c-inv">Adjustment<small>reason required</small></div><div class="eff">Stock ± (count diff)</div></div>
+    <div class="arrow"> </div>
+    <div class="step"><div class="box c-inv">Transfer<small>warehouse A → B</small></div><div class="eff">OUT of A, IN to B</div></div>
+    <div class="arrow"> </div>
+    <div class="step"><div class="box c-sal">Customer return<small>+ credit note</small></div><div class="eff">Stock IN, Receivable −</div></div>
+  </div>
+
+  <div class="note">On-hand stock = the sum of the ledger movements. A balance table (product × warehouse) is updated <b>in the same database transaction</b> so it can be read quickly. Quantities are stored as <code>Decimal(18,4)</code> and totals as <code>Decimal(18,2)</code>, never as floating point.</div>
+  <div class="foot">ERP Architecture · page 5</div>
+</section>
+
+<!-- 6. STRUCTURE -->
+<section class="page">
+  <h2>5 · Project structure &amp; build order</h2>
+  <p class="sub">pnpm monorepo. Each step below ends with a usable, tested slice.</p>
+  <div class="cols">
+    <div>
+<pre class="tree">erp/
+├── apps/
+│   ├── web/                    Next.js (App Router)
+│   │   └── app/
+│   │       ├── (auth)/login
+│   │       └── (app)/
+│   │           ├── dashboard
+│   │           ├── inventory/  products, stock, warehouses
+│   │           ├── purchasing/ suppliers, orders, receipts
+│   │           ├── sales/      customers, quotes, orders, deliveries
+│   │           ├── invoicing/  invoices, bills, payments
+│   │           └── admin/      users, roles, settings, audit
+│   └── api/                    NestJS
+│       ├── prisma/             schema.prisma, migrations, seed
+│       └── src/
+│           ├── core/           auth, users, roles, settings, audit
+│           ├── common/         guards, decorators, money helpers
+│           ├── inventory/
+│           ├── purchasing/
+│           ├── sales/
+│           ├── invoicing/
+│           └── dashboard/
+├── packages/
+│   └── shared/                 Zod schemas, types, permission codes
+├── docker-compose.yml          postgres (+ api, web in prod)
+└── docs/</pre>
+    </div>
+    <div>
+      <table>
+        <tr><th>#</th><th>Build step</th><th>Delivers</th></tr>
+        <tr><td>1</td><td>Foundation</td><td>Monorepo, Docker Postgres, Prisma, lint/test CI</td></tr>
+        <tr><td>2</td><td>Core &amp; security</td><td>Login, users, roles, permission guard, settings, audit log</td></tr>
+        <tr><td>3</td><td>Inventory</td><td>Products, units, warehouses, stock ledger, adjustments, transfers, import</td></tr>
+        <tr><td>4</td><td>Purchasing</td><td>Suppliers, purchase orders, goods receipts</td></tr>
+        <tr><td>5</td><td>Sales</td><td>Customers, quotations, orders, deliveries, returns</td></tr>
+        <tr><td>6</td><td>Invoicing</td><td>Invoices, supplier bills, payments, credit notes, PDFs</td></tr>
+        <tr><td>7</td><td>Dashboard</td><td>Key figures, low stock, receivables / payables</td></tr>
+      </table>
+      <div class="note"><b>Testing:</b> Jest unit tests for business rules (stock, totals, status changes) · Supertest API tests against a test database · Playwright tests for the critical screens.</div>
+    </div>
+  </div>
+  <div class="foot">ERP Architecture · page 6</div>
+</section>
+
+<!-- 7. OPEN QUESTIONS -->
+<section class="page">
+  <h2>6 · Open questions before development</h2>
+  <p class="sub">The answers to these change the data model, so they need to be settled before coding starts.</p>
+  <div class="cols">
+    <div>
+      <ul class="q">
+        <li><b>Walk-in counter sales:</b> do shops need a one-step "sell, get paid, print receipt" flow, or are all sales order → delivery → invoice?</li>
+        <li><b>Products:</b> do any products have variants (size/colour), lot or serial numbers, or expiry dates?</li>
+        <li><b>Shops / warehouses:</b> how many at launch? Should staff only see and move the stock and sales of <i>their own</i> shop?</li>
+        <li><b>Country &amp; tax:</b> VAT rate(s), stamp or withholding taxes, prices tax-included or tax-excluded, any mandatory e-invoicing?</li>
+        <li><b>Language &amp; currency:</b> interface language(s), right-to-left (Arabic) support, base currency.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="note warn"><b>Decisions already made by the designer (can be changed):</b><br>
+        · Base unit + carton/piece conversions<br>
+        · Line and document discounts; no price lists in v1<br>
+        · Credit limit: warn, override needs a permission<br>
+        · Average cost from the PO price at receipt; no landed costs in v1<br>
+        · CSV import + opening balances at go-live<br>
+        · Cloud server, online-only (no offline mode)<br>
+        · Out of scope for v1: accounting ledger, HR, payroll, manufacturing, POS till, e-commerce, multi-currency</div>
+    </div>
+  </div>
+  <div class="foot">ERP Architecture · page 7</div>
+</section>
+
+</body>
+</html>

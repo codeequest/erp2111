@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Module accent colours — same as the architecture document */
+  --color-mod-dashboard: #db2777;
+  --color-mod-inventory: #059669;
+  --color-mod-purchasing: #d97706;
+  --color-mod-sales: #2563eb;
+  --color-mod-invoicing: #7c3aed;
+  --color-mod-admin: #475569;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
