@@ -11,6 +11,7 @@ import { UsersModule } from './core/users/users.module';
 import { RolesModule } from './core/roles/roles.module';
 import { SettingsModule } from './core/settings/settings.module';
 import { AuditModule } from './core/audit/audit.module';
+import { NumberingModule } from './core/numbering/numbering.module';
 // Business modules
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
@@ -28,6 +29,7 @@ import { InvoicingModule } from './modules/invoicing/invoicing.module';
     RolesModule,
     SettingsModule,
     AuditModule,
+    NumberingModule,
     DashboardModule,
     InventoryModule,
     PurchasingModule,
