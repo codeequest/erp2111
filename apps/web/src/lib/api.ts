@@ -47,7 +47,11 @@ export function refreshSession(): Promise<AuthResponse | null> {
 
 export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData (file uploads) sets its own multipart Content-Type with the boundary.
+  const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  if (init.body && !isForm && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });

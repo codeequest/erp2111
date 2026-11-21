@@ -1,11 +1,15 @@
-import { Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { notImplemented } from '../../common/not-implemented';
+import { RequestUser } from '../../common/types/request-user';
+import { CreateTaxRateDto } from './dto/tax-rate.dto';
 import { SettingsService } from './settings.service';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
+ * SKELETON — endpoints answer 501 Not Implemented, except the tax-rate list / create
+ * (needed by the Products module for VAT).
  * Routes and permissions are final; replace notImplemented(...) with calls to
  * SettingsService and add DTOs (class-validator) for request bodies.
  */
@@ -32,14 +36,14 @@ export class SettingsController {
   @RequirePermissions('admin.settings.manage')
   @ApiOperation({ summary: 'List tax rates' })
   getTaxRates() {
-    return notImplemented('Admin · Settings: List tax rates');
+    return this.settingsService.listTaxRates();
   }
 
   @Post('tax-rates')
   @RequirePermissions('admin.settings.manage')
   @ApiOperation({ summary: 'Create a tax rate' })
-  taxRates() {
-    return notImplemented('Admin · Settings: Create a tax rate');
+  taxRates(@Body() dto: CreateTaxRateDto, @CurrentUser() user: RequestUser) {
+    return this.settingsService.createTaxRate(dto, user);
   }
 
   @Patch('tax-rates/:id')
