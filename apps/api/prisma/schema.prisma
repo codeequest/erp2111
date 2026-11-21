@@ -249,6 +249,11 @@ model Product {
   /// Stock is always kept in the base unit
   baseUnitId  String   @map("base_unit_id") @db.Uuid
   taxRateId   String?  @map("tax_rate_id") @db.Uuid
+  /// Product photo, served by GET /inventory/products/:id/image (or an external https URL)
+  imageUrl    String?  @map("image_url")
+  /// Standard purchase price excluding VAT — visible only with inventory.cost.view
+  purchasePrice Decimal @default(0) @map("purchase_price") @db.Decimal(18, 4)
+  /// Selling price excluding VAT
   salePrice   Decimal  @default(0) @map("sale_price") @db.Decimal(18, 4)
   /// Weighted average cost in base unit — visible only with inventory.cost.view
   averageCost Decimal  @default(0) @map("average_cost") @db.Decimal(18, 4)
