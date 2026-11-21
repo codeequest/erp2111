@@ -28,15 +28,18 @@ export default function ErpLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 lg:block">
+      <aside className="hidden w-64 shrink-0 lg:block print:hidden">
         <Sidebar />
       </aside>
 
       {/* Mobile drawer */}
       <div
-        className={clsx('fixed inset-0 z-40 lg:hidden', menuOpen ? 'visible' : 'invisible')}
+        className={clsx(
+          'fixed inset-0 z-40 lg:hidden print:hidden',
+          menuOpen ? 'visible' : 'invisible',
+        )}
         aria-hidden={!menuOpen}
       >
         <div
@@ -56,9 +59,11 @@ export default function ErpLayout({ children }: { children: React.ReactNode }) {
         </aside>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col print:block">
         <Topbar onMenu={() => setMenuOpen(true)} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 print:overflow-visible print:p-0">
+          {children}
+        </main>
       </div>
     </div>
   );

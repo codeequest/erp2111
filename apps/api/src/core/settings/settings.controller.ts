@@ -1,18 +1,27 @@
 import { Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
 import { SettingsService } from './settings.service';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
+ * SKELETON except GET /settings/public and GET /settings/tax-rates (used by the
+ * Products module). The rest answers 501 until the Administration module is merged.
  * Routes and permissions are final; replace notImplemented(...) with calls to
  * SettingsService and add DTOs (class-validator) for request bodies.
  */
 @ApiTags('Admin · Settings')
+@ApiBearerAuth()
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
+
+  /** No permission needed: every logged-in user needs the currency to read amounts. */
+  @Get('public')
+  @ApiOperation({ summary: 'Company name, logo and currency (any logged-in user)' })
+  getPublic() {
+    return this.settingsService.getPublic();
+  }
 
   @Get('company')
   @RequirePermissions('admin.settings.manage')
@@ -28,11 +37,11 @@ export class SettingsController {
     return notImplemented('Admin · Settings: Update company settings');
   }
 
+  /** Any logged-in user: product forms need the list of VAT rates. */
   @Get('tax-rates')
-  @RequirePermissions('admin.settings.manage')
-  @ApiOperation({ summary: 'List tax rates' })
+  @ApiOperation({ summary: 'List tax rates (any logged-in user)' })
   getTaxRates() {
-    return notImplemented('Admin · Settings: List tax rates');
+    return this.settingsService.listTaxRates();
   }
 
   @Post('tax-rates')

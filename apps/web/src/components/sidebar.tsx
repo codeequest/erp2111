@@ -3,13 +3,17 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
-import { NAVIGATION } from '@erp/shared';
+import { VISIBLE_NAVIGATION } from '@erp/shared';
 import { useAuth } from '@/lib/auth';
+import { useCompany } from '@/lib/company';
+import { useI18n } from '@/lib/i18n';
 import { ITEM_ICONS, MODULE_COLORS } from './icons';
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { can } = useAuth();
+  const { tx } = useI18n();
+  const { company } = useCompany();
 
   return (
     <nav className="flex h-full flex-col bg-slate-900 text-slate-300">
@@ -17,11 +21,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="grid size-8 place-items-center rounded-lg bg-blue-600 text-sm font-bold text-white">
           E
         </div>
-        <span className="text-lg font-semibold text-white">ERP</span>
+        <span className="truncate text-lg font-semibold text-white">{company?.name ?? 'ERP'}</span>
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {NAVIGATION.map((module) => {
+        {VISIBLE_NAVIGATION.map((module) => {
           const items = module.items.filter((item) => can(item.permission));
           if (items.length === 0) return null;
           const color = MODULE_COLORS[module.key];
@@ -30,7 +34,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               {module.key !== 'dashboard' && (
                 <p className="mb-1 flex items-center gap-2 px-2 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
                   <span className={clsx('size-1.5 rounded-full', color.bg)} />
-                  {module.label}
+                  <span>{tx(`module.${module.key}`, module.label)}</span>
                 </p>
               )}
               <ul className="space-y-0.5">
@@ -50,7 +54,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                         )}
                       >
                         {Icon && <Icon className={clsx('size-4', active && color.text)} />}
-                        {item.label}
+                        <span>{tx(`nav.${item.key}`, item.label)}</span>
                       </Link>
                     </li>
                   );
@@ -61,9 +65,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </div>
 
-      <p className="border-t border-slate-800 px-5 py-3 text-xs text-slate-500">
-        v0.1.0 · skeleton
-      </p>
+      <p className="border-t border-slate-800 px-5 py-3 text-xs text-slate-500">v0.2.0</p>
     </nav>
   );
 }

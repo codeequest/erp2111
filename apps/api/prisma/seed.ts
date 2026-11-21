@@ -88,12 +88,40 @@ async function seedAdmin() {
   console.log(`✔ admin user created: ${email}`);
 }
 
+/** Tunisian VAT rates. Edit them later in Administration → Settings. */
+const DEFAULT_TAX_RATES = [
+  { name: 'TVA 0 %', rate: '0' },
+  { name: 'TVA 7 %', rate: '7' },
+  { name: 'TVA 13 %', rate: '13' },
+  { name: 'TVA 19 %', rate: '19' },
+];
+const DEFAULT_TAX_RATE_NAME = 'TVA 19 %';
+
 async function seedReferenceData() {
-  await prisma.companySettings.upsert({
+  for (const t of DEFAULT_TAX_RATES) {
+    await prisma.taxRate.upsert({
+      where: { name: t.name },
+      update: {},
+      create: { name: t.name, rate: t.rate },
+    });
+  }
+  const defaultRate = await prisma.taxRate.findUniqueOrThrow({
+    where: { name: DEFAULT_TAX_RATE_NAME },
+  });
+
+  const company = await prisma.companySettings.upsert({
     where: { id: 1 },
     update: {},
-    create: { id: 1, name: 'My Company', currency: 'USD' },
+    create: { id: 1, name: 'My Company', currency: 'TND', defaultTaxRateId: defaultRate.id },
   });
+  // Older databases: set a default rate if none was chosen yet.
+  if (!company.defaultTaxRateId) {
+    await prisma.companySettings.update({
+      where: { id: 1 },
+      data: { defaultTaxRateId: defaultRate.id },
+    });
+  }
+  console.log(`✔ ${DEFAULT_TAX_RATES.length} tax rates (default ${DEFAULT_TAX_RATE_NAME})`);
 
   await prisma.unit.upsert({
     where: { code: 'PCS' },

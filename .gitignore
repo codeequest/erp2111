@@ -21,3 +21,6 @@ Thumbs.db
 
 # local Claude settings
 .claude/settings.local.json
+
+# Uploaded files (product photos)
+uploads/
