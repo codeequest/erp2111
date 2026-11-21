@@ -1,16 +1,25 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { uploadRoot } from './modules/inventory/product-images.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
+  // Uploaded product images (random file names, images only — checked on upload).
+  app.useStaticAssets(uploadRoot(config), {
+    prefix: '/api/v1/uploads/',
+    index: false,
+    dotfiles: 'deny',
+    setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+  });
   app.enableCors({
     origin: config.get<string>('WEB_ORIGIN', 'http://localhost:3000'),
     credentials: true,

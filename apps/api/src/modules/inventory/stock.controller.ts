@@ -1,18 +1,24 @@
-import { Controller, Get, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, DefaultValuePipe, Get, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
-import { InventoryService } from './inventory.service';
+import { ProductsService } from './products.service';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
- * Routes and permissions are final; replace notImplemented(...) with calls to
- * InventoryService and add DTOs (class-validator) for request bodies.
+ * low-stock is implemented; the other endpoints are still skeletons (501).
  */
 @ApiTags('Inventory · Stock')
 @Controller('inventory/stock')
 export class StockController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(private readonly products: ProductsService) {}
+
+  @Get('low-stock')
+  @RequirePermissions('inventory.stock.read')
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  @ApiOperation({ summary: 'Products under their minimum stock (total over all warehouses)' })
+  lowStock(@Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number) {
+    return this.products.lowStock(Math.min(Math.max(limit, 1), 100));
+  }
 
   @Get('levels')
   @RequirePermissions('inventory.stock.read')

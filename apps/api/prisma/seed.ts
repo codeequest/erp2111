@@ -4,7 +4,7 @@
  *  - all permissions from @erp/shared
  *  - default roles and their permissions (Admin always gets every permission)
  *  - the first admin user (SEED_ADMIN_* env vars)
- *  - company settings, a base unit, a main warehouse, document numbering
+ *  - company settings, a base unit, a main warehouse, price lists, document numbering
  */
 import { DocumentType, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -107,6 +107,13 @@ async function seedReferenceData() {
     create: { code: 'MAIN', name: 'Main warehouse' },
   });
 
+  for (const [code, name] of [
+    ['RETAIL', 'Retail'],
+    ['WHOLESALE', 'Wholesale'],
+  ]) {
+    await prisma.priceList.upsert({ where: { code }, update: {}, create: { code, name } });
+  }
+
   const year = new Date().getFullYear();
   for (const [docType, prefix] of Object.entries(SEQUENCE_PREFIXES) as [DocumentType, string][]) {
     await prisma.documentSequence.upsert({
@@ -115,7 +122,9 @@ async function seedReferenceData() {
       create: { docType, year, prefix },
     });
   }
-  console.log('✔ company settings, unit PCS, warehouse MAIN, document sequences');
+  console.log(
+    '✔ company settings, unit PCS, warehouse MAIN, price lists RETAIL / WHOLESALE, document sequences',
+  );
 }
 
 async function main() {
