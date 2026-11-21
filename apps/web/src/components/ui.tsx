@@ -1,7 +1,7 @@
 'use client';
 
 /** Small shared UI building blocks for ERP screens (forms, dialogs, states). */
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { AlertCircle, Loader2, Lock, X } from 'lucide-react';
@@ -309,6 +309,90 @@ export function Toast({ message, onDone }: { message: string | null; onDone: () 
         </svg>
       </span>
       {message}
+    </div>
+  );
+}
+
+// ── Animated number ─────────────────────────────────────────────────────────
+
+/**
+ * Counts up from 0 to `value` once (display only). `format` turns the
+ * intermediate number into text, e.g. with 2 decimals.
+ */
+export function AnimatedNumber({
+  value,
+  format = (n) => n.toLocaleString(),
+  duration = 700,
+}: {
+  value: number;
+  format?: (n: number) => string;
+  duration?: number;
+}) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setShown(value);
+      return;
+    }
+    let frame = 0;
+    const start = performance.now();
+    const from = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShown(from + (value - from) * eased);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value, duration]);
+  return <>{format(shown)}</>;
+}
+
+/** Gradient header used by the Inventory screens that are not in the catalogue tabs. */
+export function InventoryHeader({
+  section,
+  title,
+  description,
+  icon: Icon,
+  actions,
+}: {
+  section: string;
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="animate-fade-up space-y-5">
+      <nav className="flex items-center gap-1 text-xs text-slate-500">
+        <Link href="/dashboard" className="hover:text-slate-700">
+          Home
+        </Link>
+        <span aria-hidden>›</span>
+        <span className="text-mod-inventory">Inventory</span>
+        <span aria-hidden>›</span>
+        <span>{section}</span>
+      </nav>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 via-mod-inventory to-teal-700 p-5 text-white shadow-lg shadow-emerald-700/15 sm:p-6">
+        <div className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-20 left-1/3 size-56 rounded-full bg-teal-300/20 blur-3xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="grid size-11 place-items-center rounded-xl bg-white/15 ring-1 ring-white/25 backdrop-blur">
+              <Icon className="size-5.5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold sm:text-2xl">{title}</h1>
+              <p className="text-sm text-emerald-50/90">{description}</p>
+            </div>
+          </div>
+          {actions}
+        </div>
+      </div>
     </div>
   );
 }

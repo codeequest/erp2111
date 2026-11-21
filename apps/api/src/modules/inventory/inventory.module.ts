@@ -10,6 +10,8 @@ import { UnitsService } from './units.service';
 import { CategoriesService } from './categories.service';
 import { WarehousesService } from './warehouses.service';
 import { ProductsService } from './products.service';
+import { StockService } from './stock.service';
+import { StockLedgerService } from './stock-ledger.service';
 
 @Module({
   imports: [AuditModule],
@@ -26,7 +28,10 @@ import { ProductsService } from './products.service';
     CategoriesService,
     WarehousesService,
     ProductsService,
+    StockService,
+    StockLedgerService,
   ],
-  exports: [InventoryService],
+  // StockLedgerService: Purchasing (receipts) and Sales (deliveries, returns) post stock through it.
+  exports: [InventoryService, StockLedgerService],
 })
 export class InventoryModule {}

@@ -81,3 +81,61 @@ export interface Paginated<T> {
   page: number;
   pageSize: number;
 }
+
+/** One row of GET /inventory/stock/levels (one product). */
+export interface StockLevelRow {
+  product: {
+    id: string;
+    sku: string;
+    name: string;
+    baseUnitCode: string;
+    minStock: string;
+    isActive: boolean;
+  };
+  /** On hand per warehouse id (only warehouses where the product has a balance). */
+  byWarehouse: Record<string, string>;
+  /** Total of the warehouses in scope. */
+  total: string;
+  isLow: boolean;
+  /** Only with inventory.cost.view */
+  averageCost?: string;
+  /** total × averageCost, only with inventory.cost.view */
+  value?: string;
+}
+
+export interface StockLevels extends Paginated<StockLevelRow> {
+  warehouses: { id: string; code: string; name: string }[];
+  /** Total stock value of the rows in scope (all pages), only with inventory.cost.view */
+  totalValue?: string;
+}
+
+export type StockMoveTypeCode =
+  | 'OPENING'
+  | 'RECEIPT'
+  | 'DELIVERY'
+  | 'ADJUSTMENT'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_OUT'
+  | 'CUSTOMER_RETURN';
+
+/** One row of GET /inventory/stock/moves (the ledger). */
+export interface StockMoveItem {
+  id: string;
+  createdAt: string;
+  type: StockMoveTypeCode;
+  product: { id: string; sku: string; name: string; baseUnitCode: string };
+  warehouse: { id: string; code: string };
+  /** Signed, base unit. */
+  quantity: string;
+  /** Only with inventory.cost.view */
+  unitCost?: string;
+  reference: string | null;
+  reason: string | null;
+  createdBy: string;
+}
+
+/** Result of an adjustment, transfer or opening balance. */
+export interface StockPostingResult {
+  reference: string;
+  moves: number;
+}
