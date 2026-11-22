@@ -1,0 +1,139 @@
+'use client';
+
+import { useState } from 'react';
+import clsx from 'clsx';
+import { Loader2, X } from 'lucide-react';
+import type {
+  BulkProductAction,
+  BulkProductRequest,
+  BulkProductResult,
+  CategoryNode,
+} from '@erp/shared';
+import { api } from '@/lib/api';
+import { fieldClass } from './ui';
+
+const PERCENT = /^-?\d{1,4}(\.\d{1,2})?$/;
+
+/** Toolbar shown above the product table while rows are selected. */
+export function BulkBar({
+  ids,
+  categories,
+  onDone,
+  onClear,
+}: {
+  ids: string[];
+  categories: CategoryNode[];
+  onDone: (message: string) => void;
+  onClear: () => void;
+}) {
+  const [mode, setMode] = useState<'category' | 'price' | null>(null);
+  const [categoryId, setCategoryId] = useState('');
+  const [percent, setPercent] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: BulkProductAction, extra: Partial<BulkProductRequest> = {}) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body: BulkProductRequest = { ids, action, ...extra };
+      const res = await api<BulkProductResult>('/inventory/products/bulk', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      setMode(null);
+      setPercent('');
+      onDone(
+        `${res.updated} product${res.updated === 1 ? '' : 's'} updated` +
+          (res.skipped ? `, ${res.skipped} already up to date` : ''),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const pct = Number(percent);
+  const percentValid = PERCENT.test(percent.trim()) && pct > -90 && pct <= 1000 && pct !== 0;
+  const pill = 'rounded-md px-2.5 py-1 text-sm transition hover:bg-white/10 disabled:opacity-50';
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-900 px-3 py-2 text-white">
+      <span className="text-sm font-medium">{ids.length} selected</span>
+      <span className="mx-1 h-4 w-px bg-white/20" />
+
+      {mode === 'category' ? (
+        <>
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className={clsx(fieldClass, 'py-1 text-slate-900')}
+            aria-label="New category"
+          >
+            <option value="">No category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.path}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => run('setCategory', { categoryId: categoryId || null })}
+            disabled={busy}
+            className="rounded-md bg-white px-3 py-1 text-sm font-medium text-slate-900 hover:bg-slate-100"
+          >
+            Apply
+          </button>
+          <button onClick={() => setMode(null)} className={pill}>
+            Cancel
+          </button>
+        </>
+      ) : mode === 'price' ? (
+        <>
+          <input
+            value={percent}
+            onChange={(e) => setPercent(e.target.value)}
+            inputMode="decimal"
+            placeholder="+5 or -10"
+            aria-label="Price change in percent"
+            className={clsx(fieldClass, 'w-28 py-1 text-slate-900 tabular-nums')}
+            autoFocus
+          />
+          <span className="text-sm text-white/70">% (rounded to 2 decimals)</span>
+          <button
+            onClick={() => run('adjustPrice', { percent: percent.trim().replace(/^\+/, '') })}
+            disabled={busy || !percentValid}
+            className="rounded-md bg-white px-3 py-1 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+          >
+            Apply
+          </button>
+          <button onClick={() => setMode(null)} className={pill}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => setMode('category')} disabled={busy} className={pill}>
+            Set category
+          </button>
+          <button onClick={() => setMode('price')} disabled={busy} className={pill}>
+            Change price
+          </button>
+          <button onClick={() => run('activate')} disabled={busy} className={pill}>
+            Activate
+          </button>
+          <button onClick={() => run('deactivate')} disabled={busy} className={pill}>
+            Deactivate
+          </button>
+        </>
+      )}
+
+      {busy && <Loader2 className="size-4 animate-spin" />}
+      {error && <span className="text-sm text-red-300">{error}</span>}
+      <button onClick={onClear} className={clsx(pill, 'ml-auto')} aria-label="Clear selection">
+        <X className="size-4" />
+      </button>
+    </div>
+  );
+}

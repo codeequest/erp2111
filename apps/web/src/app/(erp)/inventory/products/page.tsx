@@ -11,10 +11,13 @@ import {
   Settings2,
   ChevronLeft,
   ChevronRight,
+  Download,
+  ImageIcon,
   Loader2,
   Package,
   Plus,
   Search,
+  Upload,
 } from 'lucide-react';
 import type {
   BarcodeMatch,
@@ -24,7 +27,7 @@ import type {
   ProductSortField,
   ProductStatusFilter,
 } from '@erp/shared';
-import { ApiRequestError, api } from '@/lib/api';
+import { ApiRequestError, api, apiDownload } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatMoney, formatQty } from '@/lib/format';
 import {
@@ -36,6 +39,7 @@ import {
   fieldClass,
   inputClass,
 } from '@/components/products/ui';
+import { BulkBar } from '@/components/products/bulk-bar';
 
 const PAGE_SIZE = 25;
 
@@ -54,6 +58,10 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [lowStock, setLowStock] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reloadKey, setReloadKey] = useState(0);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const [data, setData] = useState<Paginated<ProductListItem> | null>(null);
   const [lookups, setLookups] = useState<ProductLookups | null>(null);
@@ -80,18 +88,20 @@ export default function ProductsPage() {
       .catch(() => setLookups({ categories: [], units: [], taxRates: [] }));
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const params = new URLSearchParams({
-      status,
-      sort,
-      order,
-      page: String(page),
-      pageSize: String(PAGE_SIZE),
-    });
+  /** The current filters as query parameters (shared by the list and the export). */
+  function filterParams() {
+    const params = new URLSearchParams({ status, sort, order });
     if (search) params.set('search', search);
     if (categoryId) params.set('categoryId', categoryId);
     if (lowStock) params.set('lowStock', 'true');
+    return params;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = filterParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
 
     setLoading(true);
     api<Paginated<ProductListItem>>(`/inventory/products?${params}`)
@@ -99,13 +109,36 @@ export default function ProductsPage() {
         if (cancelled) return;
         setData(res);
         setError(null);
+        // Selection is per page: forget rows that are no longer shown.
+        setSelected((prev) => new Set(res.items.filter((i) => prev.has(i.id)).map((i) => i.id)));
       })
       .catch((e: Error) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [search, categoryId, status, sort, order, page, lowStock]);
+  }, [search, categoryId, status, sort, order, page, lowStock, reloadKey]);
+
+  async function exportCsv() {
+    setExporting(true);
+    setNotice(null);
+    try {
+      await apiDownload(`/inventory/products/export?${filterParams()}`, 'products.csv');
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   /** Enter in the search box: if it is a barcode, open that product directly. */
   async function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -153,6 +186,19 @@ export default function ProductsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button onClick={exportCsv} disabled={exporting} className={btnSecondary}>
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              Export
+            </button>
+            {canWrite && (
+              <Link href="/inventory/products/import" className={btnSecondary}>
+                <Upload className="size-4" /> Import
+              </Link>
+            )}
             <Link href="/inventory/products/setup" className={btnSecondary}>
               <Settings2 className="size-4" /> Catalogue setup
             </Link>
@@ -231,6 +277,28 @@ export default function ProductsPage() {
           {loading && <Loader2 className="size-4 animate-spin text-slate-400" />}
         </div>
 
+        {canWrite && selected.size > 0 && (
+          <BulkBar
+            ids={[...selected]}
+            categories={lookups?.categories ?? []}
+            onClear={() => setSelected(new Set())}
+            onDone={(msg) => {
+              setFlash(msg);
+              setSelected(new Set());
+              setReloadKey((k) => k + 1);
+              setTimeout(() => setFlash(null), 5000);
+            }}
+          />
+        )}
+        {flash && (
+          <div
+            className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800"
+            role="status"
+          >
+            {flash}
+          </div>
+        )}
+
         {notice && (
           <div className="p-3">
             <ErrorBox message={notice} />
@@ -247,6 +315,20 @@ export default function ProductsPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-medium tracking-wide text-slate-500 uppercase">
               <tr>
+                {canWrite && (
+                  <th className="w-10 pl-4">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on this page"
+                      checked={!!data?.items.length && data.items.every((i) => selected.has(i.id))}
+                      onChange={(e) =>
+                        setSelected(
+                          e.target.checked ? new Set(data?.items.map((i) => i.id)) : new Set(),
+                        )
+                      }
+                    />
+                  </th>
+                )}
                 <SortTh field="sku" label="SKU" sort={sort} order={order} onSort={toggleSort} />
                 <SortTh field="name" label="Name" sort={sort} order={order} onSort={toggleSort} />
                 <th className="px-4 py-2.5">Category</th>
@@ -271,18 +353,47 @@ export default function ProductsPage() {
                   <tr
                     key={p.id}
                     onClick={() => router.push(`/inventory/products/${p.id}`)}
-                    className="cursor-pointer transition hover:bg-slate-50"
+                    className={clsx(
+                      'cursor-pointer transition hover:bg-slate-50',
+                      selected.has(p.id) && 'bg-mod-inventory/5',
+                    )}
                   >
+                    {canWrite && (
+                      <td className="pl-4" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${p.name}`}
+                          checked={selected.has(p.id)}
+                          onChange={() => toggleRow(p.id)}
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{p.sku}</td>
                     <td className="px-4 py-2.5">
-                      <Link
-                        href={`/inventory/products/${p.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-medium text-slate-900 hover:text-mod-inventory"
-                      >
-                        {p.name}
-                      </Link>
-                      {p.barcode && <div className="text-xs text-slate-400">{p.barcode}</div>}
+                      <div className="flex items-center gap-3">
+                        <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100">
+                          {p.imageUrl ? (
+                            <img
+                              src={p.imageUrl}
+                              alt=""
+                              loading="lazy"
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="size-4 text-slate-300" />
+                          )}
+                        </div>
+                        <div>
+                          <Link
+                            href={`/inventory/products/${p.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-medium text-slate-900 hover:text-mod-inventory"
+                          >
+                            {p.name}
+                          </Link>
+                          {p.barcode && <div className="text-xs text-slate-400">{p.barcode}</div>}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">{p.category?.name ?? '—'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{p.baseUnit.code}</td>

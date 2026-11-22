@@ -72,21 +72,7 @@ export class ProductsService {
     query: ListProductsQueryDto,
     user: RequestUser,
   ): Promise<Paginated<ProductListItem>> {
-    const where: Prisma.ProductWhereInput = {};
-    const and: Prisma.ProductWhereInput[] = [];
-    if (query.status !== 'all') where.isActive = query.status === 'active';
-    if (query.categoryId) {
-      // A category includes the products of all its sub-categories.
-      where.categoryId = { in: await this.catalog.categoryAndDescendantIds(query.categoryId) };
-    }
-    if (query.lowStock) {
-      and.push({ id: { in: (await this.lowStockRows()).map((r) => r.id) } });
-    }
-    if (and.length) where.AND = and;
-    if (query.search) {
-      const contains = { contains: query.search, mode: 'insensitive' as const };
-      where.OR = [{ name: contains }, { sku: contains }, { barcode: contains }];
-    }
+    const where = await this.buildWhere(query);
 
     const [total, products] = await this.prisma.$transaction([
       this.prisma.product.count({ where }),
@@ -109,6 +95,28 @@ export class ProductsService {
       page: query.page,
       pageSize: query.pageSize,
     };
+  }
+
+  /** The list filters as a Prisma where clause (also used by the CSV export). */
+  async buildWhere(
+    query: Pick<ListProductsQueryDto, 'status' | 'categoryId' | 'lowStock' | 'search'>,
+  ): Promise<Prisma.ProductWhereInput> {
+    const where: Prisma.ProductWhereInput = {};
+    const and: Prisma.ProductWhereInput[] = [];
+    if (query.status !== 'all') where.isActive = query.status === 'active';
+    if (query.categoryId) {
+      // A category includes the products of all its sub-categories.
+      where.categoryId = { in: await this.catalog.categoryAndDescendantIds(query.categoryId) };
+    }
+    if (query.lowStock) {
+      and.push({ id: { in: (await this.lowStockRows()).map((r) => r.id) } });
+    }
+    if (and.length) where.AND = and;
+    if (query.search) {
+      const contains = { contains: query.search, mode: 'insensitive' as const };
+      where.OR = [{ name: contains }, { sku: contains }, { barcode: contains }];
+    }
+    return where;
   }
 
   async findOne(id: string, user: RequestUser): Promise<ProductDetail> {
@@ -443,14 +451,14 @@ export class ProductsService {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  private async getOrThrow(id: string) {
+  async getOrThrow(id: string) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
     return product;
   }
 
   /** Sum of stock across warehouses for each product id. */
-  private async stockOnHand(productIds: string[]): Promise<Map<string, Prisma.Decimal>> {
+  async stockOnHand(productIds: string[]): Promise<Map<string, Prisma.Decimal>> {
     if (productIds.length === 0) return new Map();
     const rows = await this.prisma.stockBalance.groupBy({
       by: ['productId'],
@@ -478,7 +486,7 @@ export class ProductsService {
    *  - productBarcodeOf: ignore this product's own barcode (editing the product)
    *  - packsOf: ignore this product's pack barcodes (they are being replaced)
    */
-  private async assertBarcodeFree(
+  async assertBarcodeFree(
     barcode: string,
     except: { productBarcodeOf?: string; packsOf?: string },
   ) {
@@ -550,6 +558,7 @@ export function toListItem(
     salePrice: p.salePrice.toString(),
     minStock: p.minStock.toString(),
     stockOnHand: (stockOnHand ?? new Prisma.Decimal(0)).toString(),
+    imageUrl: productImageUrl(p.imageFile),
     isActive: p.isActive,
   };
   if (canSeeCost) item.averageCost = p.averageCost.toString();
@@ -591,4 +600,9 @@ function packSnapshot(u: {
     forSale: u.forSale,
     barcode: u.barcode,
   };
+}
+
+/** Public URL (relative to the site) of a stored product image. */
+export function productImageUrl(file: string | null): string | null {
+  return file ? `/api/v1/inventory/product-images/${file}` : null;
 }

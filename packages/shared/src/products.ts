@@ -47,6 +47,8 @@ export interface ProductListItem {
   minStock: string;
   /** Sum of stock in every warehouse, in the base unit */
   stockOnHand: string;
+  /** Relative URL of the product photo, or null */
+  imageUrl: string | null;
   isActive: boolean;
 }
 
@@ -176,4 +178,73 @@ export interface LowStockSummary {
     stockOnHand: string;
     minStock: string;
   }>;
+}
+
+// ── Phase 3: import / export, history, bulk actions ─────────────────────────
+
+/** Columns of the product CSV, in order. average_cost is export-only. */
+export const PRODUCT_CSV_COLUMNS = [
+  'sku',
+  'barcode',
+  'name',
+  'description',
+  'category',
+  'base_unit',
+  'tax_rate',
+  'sale_price',
+  'min_stock',
+  'active',
+] as const;
+
+export type ImportRowAction = 'create' | 'update' | 'unchanged' | 'error';
+
+export interface ImportRowResult {
+  /** Line number in the file (the header is line 1) */
+  line: number;
+  sku: string;
+  action: ImportRowAction;
+  /** Why the row was rejected (action = error) */
+  errors: string[];
+  /** Fields that will change (action = update) */
+  changes: string[];
+}
+
+export interface ImportReport {
+  /** true when nothing was written (preview) */
+  dryRun: boolean;
+  totals: Record<ImportRowAction, number>;
+  rows: ImportRowResult[];
+}
+
+export interface HistoryEntry {
+  id: string;
+  action: string;
+  user: string | null;
+  createdAt: string;
+  /** One line per changed field */
+  changes: Array<{ field: string; from: string | null; to: string | null }>;
+}
+
+export const BULK_PRODUCT_ACTIONS = [
+  'setCategory',
+  'adjustPrice',
+  'activate',
+  'deactivate',
+] as const;
+export type BulkProductAction = (typeof BULK_PRODUCT_ACTIONS)[number];
+
+export interface BulkProductRequest {
+  ids: string[];
+  action: BulkProductAction;
+  /** setCategory: null removes the category */
+  categoryId?: string | null;
+  /** adjustPrice: e.g. "5" for +5 %, "-10" for -10 % */
+  percent?: string;
+}
+
+export interface BulkProductResult {
+  /** Products actually changed */
+  updated: number;
+  /** Selected products already in the requested state */
+  skipped: number;
 }

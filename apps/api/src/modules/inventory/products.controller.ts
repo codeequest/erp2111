@@ -1,7 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -9,21 +12,38 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { notImplemented } from '../../common/not-implemented';
 import { RequestUser } from '../../common/types/request-user';
 import { SetPackUnitsDto } from './dto/catalog.dto';
 import { CreateProductDto, ListProductsQueryDto, UpdateProductDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
+import { BulkProductDto, ImportQueryDto } from './dto/phase3.dto';
+import { MAX_IMAGE_BYTES, ProductBulkService, UploadedFileData } from './product-bulk.service';
+import { ProductHistoryService } from './product-history.service';
+import { ProductTransferService } from './product-transfer.service';
+
+const CSV_LIMIT_BYTES = 10 * 1024 * 1024;
+
+const FILE_BODY = {
+  schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } },
+};
 
 @ApiTags('Inventory · Products')
 @ApiBearerAuth()
 @Controller('inventory/products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly bulkService: ProductBulkService,
+    private readonly historyService: ProductHistoryService,
+    private readonly transferService: ProductTransferService,
+  ) {}
 
   @Get()
   @RequirePermissions('inventory.product.read')
@@ -38,6 +58,23 @@ export class ProductsController {
   @ApiOperation({ summary: 'Categories, units and tax rates for the product form' })
   lookups() {
     return this.productsService.lookups();
+  }
+
+  @Get('export')
+  @RequirePermissions('inventory.product.read')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="products.csv"')
+  @ApiOperation({ summary: 'Download the products matching the list filters as CSV' })
+  exportCsv(@Query() query: ListProductsQueryDto, @CurrentUser() user: RequestUser) {
+    return this.transferService.exportCsv(query, user);
+  }
+
+  @Post('bulk')
+  @HttpCode(200)
+  @RequirePermissions('inventory.product.write')
+  @ApiOperation({ summary: 'Change category, adjust price or (de)activate many products' })
+  bulk(@Body() dto: BulkProductDto, @CurrentUser() user: RequestUser) {
+    return this.bulkService.bulk(dto, user);
   }
 
   @Get('barcode/:code')
@@ -74,6 +111,35 @@ export class ProductsController {
     return this.productsService.update(id, dto, user);
   }
 
+  @Get(':id/history')
+  @RequirePermissions('inventory.product.read')
+  @ApiOperation({ summary: 'Change history of a product (latest 100 changes)' })
+  history(@Param('id', ParseUUIDPipe) id: string) {
+    return this.historyService.history(id);
+  }
+
+  @Post(':id/image')
+  @HttpCode(200)
+  @RequirePermissions('inventory.product.write')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_BYTES + 1 } }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(FILE_BODY)
+  @ApiOperation({ summary: 'Upload or replace the product photo (JPEG, PNG or WebP, max 2 MB)' })
+  setImage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedFileData | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.bulkService.setImage(id, file, user);
+  }
+
+  @Delete(':id/image')
+  @RequirePermissions('inventory.product.write')
+  @ApiOperation({ summary: 'Remove the product photo' })
+  removeImage(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser) {
+    return this.bulkService.removeImage(id, user);
+  }
+
   @Put(':id/units')
   @RequirePermissions('inventory.product.write')
   @ApiOperation({ summary: 'Replace the pack sizes of a product (e.g. 1 CTN = 24 PCS)' })
@@ -102,9 +168,20 @@ export class ProductsController {
   }
 
   @Post('import')
+  @HttpCode(200)
   @RequirePermissions('inventory.product.write')
-  @ApiOperation({ summary: 'Import products from CSV' })
-  import() {
-    return notImplemented('Inventory · Products: Import products from CSV');
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: CSV_LIMIT_BYTES } }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(FILE_BODY)
+  @ApiOperation({
+    summary: 'Import products from CSV, matched by SKU. dryRun=true (default) only previews.',
+  })
+  import(
+    @Query() query: ImportQueryDto,
+    @UploadedFile() file: UploadedFileData | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    if (!file) throw new BadRequestException('Attach a CSV file in the "file" field');
+    return this.transferService.importCsv(file.buffer.toString('utf8'), query.dryRun, user);
   }
 }

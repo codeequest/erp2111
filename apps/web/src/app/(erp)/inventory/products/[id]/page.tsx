@@ -17,6 +17,8 @@ import {
   btnSecondary,
 } from '@/components/products/ui';
 import { PackUnitsCard } from '@/components/products/pack-units-card';
+import { ProductImageCard } from '@/components/products/product-image-card';
+import { ProductHistoryCard } from '@/components/products/product-history-card';
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -153,24 +155,31 @@ export default function ProductDetailPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Details */}
-        <Card title="Details" className="lg:col-span-1">
-          <dl className="space-y-3 text-sm">
-            <Row label="Category" value={product.category?.name} />
-            <Row label="Base unit" value={`${product.baseUnit.code} — ${product.baseUnit.name}`} />
-            <Row
-              label="Tax rate"
-              value={
-                product.taxRate
-                  ? `${product.taxRate.name} (${product.taxRate.rate}%)`
-                  : 'Company default'
-              }
-            />
-            <Row label="Description" value={product.description} />
-            <Row label="Created" value={formatDateTime(product.createdAt)} />
-            <Row label="Last updated" value={formatDateTime(product.updatedAt)} />
-          </dl>
-        </Card>
+        <div className="space-y-6 lg:col-span-1">
+          <ProductImageCard product={product} canWrite={canWrite} onSaved={setProduct} />
+
+          {/* Details */}
+          <Card title="Details">
+            <dl className="space-y-3 text-sm">
+              <Row label="Category" value={product.category?.name} />
+              <Row
+                label="Base unit"
+                value={`${product.baseUnit.code} — ${product.baseUnit.name}`}
+              />
+              <Row
+                label="Tax rate"
+                value={
+                  product.taxRate
+                    ? `${product.taxRate.name} (${product.taxRate.rate}%)`
+                    : 'Company default'
+                }
+              />
+              <Row label="Description" value={product.description} />
+              <Row label="Created" value={formatDateTime(product.createdAt)} />
+              <Row label="Last updated" value={formatDateTime(product.updatedAt)} />
+            </dl>
+          </Card>
+        </div>
 
         <div className="space-y-6 lg:col-span-2">
           <PackUnitsCard product={product} canWrite={canWrite} onSaved={setProduct} />
@@ -253,6 +262,11 @@ export default function ProductDetailPage() {
               )}
             </Card>
           )}
+
+          <ProductHistoryCard
+            productId={product.id}
+            version={`${product.updatedAt}|${JSON.stringify(product.packUnits)}`}
+          />
         </div>
       </div>
     </div>

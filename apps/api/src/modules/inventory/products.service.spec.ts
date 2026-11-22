@@ -28,6 +28,7 @@ const product = {
   salePrice: D('12.5'),
   averageCost: D('7.25'),
   minStock: D(0),
+  imageFile: null,
   isActive: true,
   createdAt: new Date(),
   updatedAt: new Date(),
