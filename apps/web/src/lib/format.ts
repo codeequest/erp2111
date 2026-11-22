@@ -1,25 +1,19 @@
-/** Formats an API decimal string ("12.5000") for display, e.g. "12.50". */
-export function formatAmount(value: string | null | undefined, maxDecimals = 2): string {
-  if (value == null || value === '') return '—';
+/** Formats a decimal string from the API, e.g. "1234.5" → "1,234.50". */
+export function formatMoney(value: string | null | undefined): string {
+  if (value == null) return '—';
   const n = Number(value);
   if (!Number.isFinite(n)) return value;
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: Math.min(2, maxDecimals),
-    maximumFractionDigits: maxDecimals,
-  });
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
-/** Quantities: no forced decimals ("5", "2.5"). */
+/** Formats a quantity: no forced decimals, up to 4. */
 export function formatQty(value: string | null | undefined): string {
-  if (value == null || value === '') return '—';
+  if (value == null) return '—';
   const n = Number(value);
   if (!Number.isFinite(n)) return value;
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
-/** API decimal string -> form input value ("12.5000" -> "12.5"). */
-export function decimalToInput(value: string | null | undefined): string {
-  if (value == null || value === '') return '';
-  const n = Number(value);
-  return Number.isFinite(n) ? String(n) : value;
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }

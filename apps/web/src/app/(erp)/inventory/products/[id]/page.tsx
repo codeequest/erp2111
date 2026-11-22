@@ -1,209 +1,326 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, History, Loader2, Power, PowerOff } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import clsx from 'clsx';
+import { AlertTriangle, Loader2, Pencil, Power, PowerOff } from 'lucide-react';
 import type { ProductDetail } from '@erp/shared';
-import { api, ApiRequestError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatAmount, formatQty } from '@/lib/format';
-import { AccessDenied, Breadcrumbs, StatusBadge } from '@/components/page-header';
-import { ProductForm } from '@/components/product-form';
+import { formatDateTime, formatMoney, formatQty } from '@/lib/format';
+import {
+  Breadcrumbs,
+  ErrorBox,
+  StatusBadge,
+  btnPrimary,
+  btnSecondary,
+} from '@/components/products/ui';
+import { PackUnitsCard } from '@/components/products/pack-units-card';
+import { ProductImageCard } from '@/components/products/product-image-card';
+import { ProductHistoryCard } from '@/components/products/product-history-card';
+import { ProductPricesCard } from '@/components/products/product-prices-card';
 
-export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ProductDetailPage() {
+  const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
-  const canRead = can('inventory.product.read');
   const canWrite = can('inventory.product.write');
-  const canViewCost = can('inventory.cost.view');
-  const canReadStock = can('inventory.stock.read');
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
-  const [error, setError] = useState<{ status: number; message: string } | null>(null);
-  const [toggling, setToggling] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // Read once, on mount: shows "created" after being redirected from the New page.
-    if (new URLSearchParams(window.location.search).get('created')) {
-      setNotice('Product created.');
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!canRead) return;
     api<ProductDetail>(`/inventory/products/${id}`)
       .then(setProduct)
-      .catch((e: Error) =>
-        setError({ status: e instanceof ApiRequestError ? e.status : 0, message: e.message }),
+      .catch((e: Error) => setError(e.message));
+  }, [id]);
+
+  async function toggleActive() {
+    if (!product) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const action = product.isActive ? 'deactivate' : 'activate';
+      setProduct(
+        await api<ProductDetail>(`/inventory/products/${id}/${action}`, { method: 'POST' }),
       );
-  }, [id, canRead]);
-
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 4000);
-    return () => clearTimeout(t);
-  }, [notice]);
-
-  if (!canRead) return <AccessDenied permission="inventory.product.read" what="Products" />;
-
-  if (error) {
-    return (
-      <div className="mx-auto mt-16 max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center">
-        <h1 className="text-lg font-semibold text-slate-900">
-          {error.status === 404 || error.status === 400 ? 'Product not found' : 'Could not load'}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">{error.message}</p>
-        <Link
-          href="/inventory/products"
-          className="mt-5 inline-block text-sm font-medium text-blue-600 hover:underline"
-        >
-          Back to products
-        </Link>
-      </div>
-    );
+      setConfirming(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!product) {
     return (
-      <div className="flex justify-center py-24">
-        <Loader2 className="size-6 animate-spin text-slate-400" />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <Breadcrumbs trail={[{ label: 'Products', href: '/inventory/products' }]} />
+        {error ? (
+          <ErrorBox message={error} />
+        ) : (
+          <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
+        )}
       </div>
     );
   }
 
-  async function toggleActive() {
-    if (!product) return;
-    if (
-      product.isActive &&
-      !window.confirm(
-        `Deactivate "${product.name}"? It will be hidden from new orders but kept in history.`,
-      )
-    ) {
-      return;
-    }
-    setToggling(true);
-    try {
-      const updated = await api<ProductDetail>(
-        `/inventory/products/${product.id}/${product.isActive ? 'deactivate' : 'activate'}`,
-        { method: 'POST' },
-      );
-      setProduct(updated);
-      setNotice(updated.isActive ? 'Product re-activated.' : 'Product deactivated.');
-    } catch (e) {
-      setNotice(null);
-      window.alert((e as Error).message);
-    } finally {
-      setToggling(false);
-    }
-  }
-
-  const low = Number(product.minStock) > 0 && Number(product.onHand) < Number(product.minStock);
+  const low =
+    Number(product.minStock) > 0 && Number(product.stockOnHand) < Number(product.minStock);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <Breadcrumbs
-          items={[
-            { label: 'Home', href: '/dashboard' },
-            { label: 'Inventory' },
-            { label: 'Products', href: '/inventory/products' },
-            { label: product.sku },
-          ]}
+          trail={[{ label: 'Products', href: '/inventory/products' }, { label: product.name }]}
         />
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-slate-900">{product.name}</h1>
               <StatusBadge active={product.isActive} />
             </div>
-            <p className="mt-0.5 font-mono text-sm text-slate-500">{product.sku}</p>
+            <p className="mt-1 font-mono text-sm text-slate-500">
+              {product.sku}
+              {product.barcode && <span className="ml-3">· {product.barcode}</span>}
+            </p>
           </div>
           {canWrite && (
-            <button
-              onClick={toggleActive}
-              disabled={toggling}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {toggling ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : product.isActive ? (
-                <PowerOff className="size-4" />
+            <div className="flex flex-wrap gap-2">
+              {confirming ? (
+                <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
+                  {product.isActive
+                    ? 'Hide this product from new orders?'
+                    : 'Make this product available again?'}
+                  <button
+                    onClick={toggleActive}
+                    disabled={busy}
+                    className="rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {busy ? 'Saving…' : 'Yes'}
+                  </button>
+                  <button
+                    onClick={() => setConfirming(false)}
+                    className="rounded px-2 py-1 text-xs hover:bg-amber-100"
+                  >
+                    No
+                  </button>
+                </div>
               ) : (
-                <Power className="size-4" />
+                <button onClick={() => setConfirming(true)} className={btnSecondary}>
+                  {product.isActive ? (
+                    <>
+                      <PowerOff className="size-4" /> Deactivate
+                    </>
+                  ) : (
+                    <>
+                      <Power className="size-4" /> Activate
+                    </>
+                  )}
+                </button>
               )}
-              {product.isActive ? 'Deactivate' : 'Re-activate'}
-            </button>
+              <Link href={`/inventory/products/${id}/edit`} className={btnPrimary}>
+                <Pencil className="size-4" /> Edit
+              </Link>
+            </div>
           )}
         </div>
       </div>
 
-      {notice && (
-        <p
-          role="status"
-          className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
-        >
-          <CheckCircle2 className="size-4" /> {notice}
-        </p>
+      {error && <ErrorBox message={error} />}
+
+      {!product.isActive && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          This product is inactive: it is hidden from new sales and purchase orders but kept in
+          history.
+        </div>
       )}
 
-      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* Key figures */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Sale price" value={formatMoney(product.salePrice)} />
+        {product.averageCost !== undefined && (
+          <Stat label="Average cost" value={formatMoney(product.averageCost)} />
+        )}
         <Stat
           label="On hand"
-          value={`${formatQty(product.onHand)} ${product.baseUnit.code}`}
-          warn={low}
-          hint={low ? `Below minimum (${formatQty(product.minStock)})` : undefined}
+          value={`${formatQty(product.stockOnHand)} ${product.baseUnit.code}`}
+          warn={low ? `Below minimum (${formatQty(product.minStock)})` : undefined}
         />
-        <Stat label="Sale price" value={formatAmount(product.salePrice)} />
-        {canViewCost && <Stat label="Average cost" value={formatAmount(product.averageCost, 4)} />}
-        <Stat label="Last updated" value={new Date(product.updatedAt).toLocaleDateString()} />
-      </dl>
+        <Stat
+          label="Minimum stock"
+          value={Number(product.minStock) > 0 ? formatQty(product.minStock) : 'Off'}
+        />
+      </div>
 
-      {canReadStock && (
-        <Link
-          href={`/inventory/stock?tab=moves&productId=${product.id}&product=${encodeURIComponent(`${product.sku} — ${product.name}`)}`}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
-        >
-          <History className="size-4" /> View stock movements
-        </Link>
-      )}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-1">
+          <ProductImageCard product={product} canWrite={canWrite} onSaved={setProduct} />
 
-      <ProductForm
-        product={product}
-        readOnly={!canWrite}
-        onSaved={(p) => {
-          setProduct(p);
-          setNotice('Changes saved.');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-      />
+          {/* Details */}
+          <Card title="Details">
+            <dl className="space-y-3 text-sm">
+              <Row label="Category" value={product.category?.name} />
+              <Row
+                label="Base unit"
+                value={`${product.baseUnit.code} — ${product.baseUnit.name}`}
+              />
+              <Row
+                label="Tax rate"
+                value={
+                  product.taxRate
+                    ? `${product.taxRate.name} (${product.taxRate.rate}%)`
+                    : 'Company default'
+                }
+              />
+              <Row label="Description" value={product.description} />
+              <Row label="Created" value={formatDateTime(product.createdAt)} />
+              <Row label="Last updated" value={formatDateTime(product.updatedAt)} />
+            </dl>
+          </Card>
+        </div>
+
+        <div className="space-y-6 lg:col-span-2">
+          <PackUnitsCard product={product} canWrite={canWrite} onSaved={setProduct} />
+          <ProductPricesCard
+            productId={product.id}
+            version={`${product.updatedAt}|${JSON.stringify(product.packUnits)}`}
+          />
+
+          {/* Stock by warehouse */}
+          <Card title="Stock by warehouse">
+            {product.stockByWarehouse.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No stock yet. Stock arrives through goods receipts and adjustments.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-slate-100">
+                  {product.stockByWarehouse.map((s) => (
+                    <tr key={s.warehouse.id}>
+                      <td className="py-2">
+                        <span className="font-mono text-xs text-slate-500">{s.warehouse.code}</span>{' '}
+                        {s.warehouse.name}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {formatQty(s.quantity)} {product.baseUnit.code}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
+          {/* Recent movements */}
+          {product.recentMoves && (
+            <Card title="Recent stock movements">
+              {product.recentMoves.length === 0 ? (
+                <p className="text-sm text-slate-500">No movements yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs text-slate-500 uppercase">
+                      <tr>
+                        <th className="py-2 pr-3 font-medium">Date</th>
+                        <th className="py-2 pr-3 font-medium">Type</th>
+                        <th className="py-2 pr-3 font-medium">Warehouse</th>
+                        <th className="py-2 pr-3 font-medium">Reference</th>
+                        <th className="py-2 text-right font-medium">Qty</th>
+                        {product.averageCost !== undefined && (
+                          <th className="py-2 pl-3 text-right font-medium">Unit cost</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {product.recentMoves.map((m) => (
+                        <tr key={m.id}>
+                          <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
+                            {formatDateTime(m.createdAt)}
+                          </td>
+                          <td className="py-2 pr-3">{m.type.replaceAll('_', ' ').toLowerCase()}</td>
+                          <td className="py-2 pr-3 font-mono text-xs">{m.warehouse.code}</td>
+                          <td className="py-2 pr-3 text-slate-600">
+                            {m.reference ?? m.reason ?? '—'}
+                          </td>
+                          <td
+                            className={clsx(
+                              'py-2 text-right tabular-nums',
+                              Number(m.quantity) < 0 ? 'text-red-600' : 'text-emerald-700',
+                            )}
+                          >
+                            {Number(m.quantity) > 0 ? '+' : ''}
+                            {formatQty(m.quantity)}
+                          </td>
+                          {product.averageCost !== undefined && (
+                            <td className="py-2 pl-3 text-right tabular-nums">
+                              {formatMoney(m.unitCost)}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+
+          <ProductHistoryCard
+            productId={product.id}
+            version={`${product.updatedAt}|${JSON.stringify(product.packUnits)}`}
+          />
+        </div>
+      </div>
     </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  warn,
-  hint,
-}: {
-  label: string;
-  value: string;
-  warn?: boolean;
-  hint?: string;
-}) {
+function Stat({ label, value, warn }: { label: string; value: string; warn?: string }) {
   return (
-    <div
-      className={`rounded-xl border bg-white p-4 ${warn ? 'border-amber-300' : 'border-slate-200'}`}
-    >
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd
-        className={`mt-1 text-lg font-semibold tabular-nums ${warn ? 'text-amber-700' : 'text-slate-900'}`}
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p
+        className={clsx(
+          'mt-1 text-xl font-semibold tabular-nums',
+          warn ? 'text-amber-600' : 'text-slate-900',
+        )}
       >
         {value}
-      </dd>
-      {hint && <p className="mt-0.5 text-xs text-amber-700">{hint}</p>}
+      </p>
+      {warn && (
+        <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+          <AlertTriangle className="size-3" /> {warn}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Card({
+  title,
+  className,
+  children,
+}: {
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={clsx('rounded-xl border border-slate-200 bg-white p-5', className)}>
+      <h2 className="mb-3 text-sm font-semibold text-slate-900">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className="mt-0.5 whitespace-pre-line text-slate-900">{value || '—'}</dd>
     </div>
   );
 }

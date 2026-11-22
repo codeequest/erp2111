@@ -6,14 +6,21 @@ import { WarehousesController } from './warehouses.controller';
 import { StockController } from './stock.controller';
 import { InventoryService } from './inventory.service';
 import { ProductsService } from './products.service';
-import { ProductsExcelService } from './products-excel.service';
 import { CatalogService } from './catalog.service';
+import { ProductBulkService } from './product-bulk.service';
+import { ProductHistoryService } from './product-history.service';
+import { ProductTransferService } from './product-transfer.service';
+import { ProductImagesController } from './product-images.controller';
+import { PriceListsController } from './price-lists.controller';
+import { PriceListsService } from './price-lists.service';
 import { StockService } from './stock.service';
 import { AdjustmentsService } from './adjustments.service';
 
 @Module({
   controllers: [
     ProductsController,
+    ProductImagesController,
+    PriceListsController,
     CategoriesController,
     UnitsController,
     WarehousesController,
@@ -22,8 +29,11 @@ import { AdjustmentsService } from './adjustments.service';
   providers: [
     InventoryService,
     ProductsService,
-    ProductsExcelService,
     CatalogService,
+    ProductBulkService,
+    ProductHistoryService,
+    ProductTransferService,
+    PriceListsService,
     StockService,
     AdjustmentsService,
   ],

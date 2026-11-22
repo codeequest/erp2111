@@ -6,7 +6,7 @@ import { nextDocumentNumber } from '../../common/document-number';
 import { RequestUser } from '../../common/types/request-user';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AdjustmentsQueryDto, CreateAdjustmentDto } from './dto/stock.dto';
-import { canSeeCost } from './products.service';
+import { canSeeCost } from './stock-ledger';
 import { toAuditJson } from './prisma-errors';
 import { lockBalance, postMove } from './stock-ledger';
 

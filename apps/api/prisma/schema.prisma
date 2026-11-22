@@ -219,6 +219,7 @@ model Unit {
 
   baseProducts        Product[]
   productUnits        ProductUnit[]
+  priceListItems      PriceListItem[]
   purchaseOrderLines  PurchaseOrderLine[]
   salesOrderLines     SalesOrderLine[]
 
@@ -254,6 +255,8 @@ model Product {
   averageCost Decimal  @default(0) @map("average_cost") @db.Decimal(18, 4)
   /// Low-stock alert threshold (base unit)
   minStock    Decimal  @default(0) @map("min_stock") @db.Decimal(18, 4)
+  /// File name of the product photo in UPLOAD_DIR/products (random, unguessable)
+  imageFile   String?  @map("image_file")
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -263,6 +266,7 @@ model Product {
   taxRate  TaxRate?  @relation(fields: [taxRateId], references: [id])
 
   units               ProductUnit[]
+  priceListItems      PriceListItem[]
   stockMoves          StockMove[]
   stockBalances       StockBalance[]
   purchaseOrderLines  PurchaseOrderLine[]
@@ -293,6 +297,42 @@ model ProductUnit {
 
   @@unique([productId, unitId])
   @@map("product_units")
+}
+
+/// A named set of selling prices, e.g. "Wholesale" or "Retail".
+/// A product without its own price in the list gets
+/// sale price x pack factor x (1 + adjustPercent / 100).
+model PriceList {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @unique
+  description   String?
+  /// e.g. -10.00 for 10 % below the normal sale price; 0 = same price
+  adjustPercent Decimal  @default(0) @map("adjust_percent") @db.Decimal(7, 2)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  items PriceListItem[]
+
+  @@map("price_lists")
+}
+
+/// A fixed price for one product in one unit (base unit or a pack size) in a price list.
+model PriceListItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  priceListId String   @map("price_list_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  unitId      String   @map("unit_id") @db.Uuid
+  price       Decimal  @db.Decimal(18, 4)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unit      Unit      @relation(fields: [unitId], references: [id])
+
+  @@unique([priceListId, productId, unitId])
+  @@index([productId])
+  @@map("price_list_items")
 }
 
 model Warehouse {

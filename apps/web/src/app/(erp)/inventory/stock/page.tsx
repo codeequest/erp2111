@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import {
   STOCK_MOVE_TYPES,
-  type CategoryDto,
+  type CategoryNode,
   type Paginated,
   type StockFilter,
   type StockLevelsResponse,
@@ -26,7 +26,7 @@ import {
 } from '@erp/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatAmount, formatQty } from '@/lib/format';
+import { formatMoney, formatQty } from '@/lib/format';
 import { AccessDenied, Breadcrumbs } from '@/components/page-header';
 
 type Tab = 'levels' | 'moves';
@@ -179,7 +179,7 @@ function LevelsTab({
   const [categoryId, setCategoryId] = useState('');
   const [stock, setStock] = useState<StockFilter>('all');
   const [page, setPage] = useState(1);
-  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [data, setData] = useState<StockLevelsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +193,7 @@ function LevelsTab({
   }, [searchInput]);
 
   useEffect(() => {
-    api<CategoryDto[]>('/inventory/categories')
+    api<CategoryNode[]>('/inventory/categories')
       .then(setCategories)
       .catch(() => setCategories([]));
   }, []);
@@ -235,7 +235,7 @@ function LevelsTab({
           <div className="rounded-xl border border-slate-200 bg-white px-5 py-3">
             <p className="text-xs font-medium text-slate-500">Stock value (at average cost)</p>
             <p className="mt-0.5 text-xl font-semibold text-slate-900 tabular-nums">
-              {formatAmount(data.totalValue)}
+              {formatMoney(data.totalValue)}
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-5 py-3">
@@ -280,7 +280,7 @@ function LevelsTab({
             <option value="">All categories</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.path}
               </option>
             ))}
           </select>
@@ -398,7 +398,7 @@ function LevelsTab({
                       </td>
                       {canViewCost && (
                         <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">
-                          {formatAmount(r.value)}
+                          {formatMoney(r.value)}
                         </td>
                       )}
                       <td className="px-4 py-2.5 text-right">
@@ -625,7 +625,7 @@ function MovesTab({
                     </td>
                     {canViewCost && (
                       <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">
-                        {formatAmount(m.unitCost, 4)}
+                        {formatMoney(m.unitCost)}
                       </td>
                     )}
                     <td className="px-4 py-2.5 text-slate-600">

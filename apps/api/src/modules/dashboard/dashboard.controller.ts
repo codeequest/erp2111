@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
 import { DashboardService } from './dashboard.service';
+import { ProductsService } from '../inventory/products.service';
 
 /**
  * SKELETON — every endpoint answers 501 Not Implemented.
@@ -12,7 +13,10 @@ import { DashboardService } from './dashboard.service';
 @ApiTags('Dashboard')
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly productsService: ProductsService,
+  ) {}
 
   @Get('summary')
   @RequirePermissions('dashboard.summary.view')
@@ -36,6 +40,6 @@ export class DashboardController {
   @RequirePermissions('dashboard.summary.view')
   @ApiOperation({ summary: 'Products below their minimum stock' })
   getLowStock() {
-    return notImplemented('Dashboard: Products below their minimum stock');
+    return this.productsService.lowStockSummary();
   }
 }

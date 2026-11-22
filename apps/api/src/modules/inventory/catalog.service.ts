@@ -4,162 +4,169 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { CategoryDto, ProductFormOptions, UnitDto } from '@erp/shared';
+import type { CategoryNode, UnitRow } from '@erp/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/types/request-user';
-import { CreateCategoryDto, CreateUnitDto, UpdateCategoryDto } from './dto/catalog.dto';
-import { rethrowPrismaError, toAuditJson } from './prisma-errors';
+import { audit } from '../../common/audit';
+import { buildCategoryTree, categoryWithDescendants } from './category-tree';
+import {
+  CreateCategoryDto,
+  CreateUnitDto,
+  UpdateCategoryDto,
+  UpdateUnitDto,
+} from './dto/catalog.dto';
 
-const categorySelect = { id: true, name: true, parentId: true, isActive: true } as const;
-const unitSelect = { id: true, code: true, name: true } as const;
-
-/** Units of measure, product categories and the lookups the product form needs. */
+/** Categories and units of measure. Every write is audited in the same transaction. */
 @Injectable()
 export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listUnits(): Promise<UnitDto[]> {
-    return this.prisma.unit.findMany({ select: unitSelect, orderBy: { code: 'asc' } });
-  }
+  // ── Categories ─────────────────────────────────────────────────────────────
 
-  async createUnit(dto: CreateUnitDto, user: RequestUser): Promise<UnitDto> {
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const unit = await tx.unit.create({ data: dto, select: unitSelect });
-        await tx.auditLog.create({
-          data: {
-            userId: user.id,
-            action: 'create',
-            entity: 'Unit',
-            entityId: unit.id,
-            after: toAuditJson(unit),
-          },
-        });
-        return unit;
-      });
-    } catch (err) {
-      rethrowPrismaError(err, 'Unit');
-    }
-  }
-
-  /** Flat list, sorted by name; the client builds the tree from parentId. */
-  listCategories(includeInactive = false): Promise<CategoryDto[]> {
-    return this.prisma.category.findMany({
-      where: includeInactive ? {} : { isActive: true },
-      select: categorySelect,
-      orderBy: { name: 'asc' },
+  async listCategories(includeInactive: boolean): Promise<CategoryNode[]> {
+    const rows = await this.prisma.category.findMany({
+      include: { _count: { select: { products: true } } },
     });
+    const tree = buildCategoryTree(
+      rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        parentId: r.parentId,
+        isActive: r.isActive,
+        productCount: r._count.products,
+      })),
+    );
+    return includeInactive ? tree : tree.filter((c) => c.isActive);
   }
 
-  async createCategory(dto: CreateCategoryDto, user: RequestUser): Promise<CategoryDto> {
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        // Postgres treats NULLs as distinct, so @@unique([parentId, name]) does not
-        // catch duplicate top-level names: check them here.
-        await assertNameFree(tx, dto.name, dto.parentId ?? null);
-        const category = await tx.category.create({
-          data: { name: dto.name, parentId: dto.parentId ?? null },
-          select: categorySelect,
-        });
-        await tx.auditLog.create({
-          data: {
-            userId: user.id,
-            action: 'create',
-            entity: 'Category',
-            entityId: category.id,
-            after: toAuditJson(category),
-          },
-        });
-        return category;
-      });
-    } catch (err) {
-      rethrowPrismaError(err, 'Category');
-    }
+  /** Ids of a category and all its sub-categories, for filtering products. */
+  async categoryAndDescendantIds(id: string): Promise<string[]> {
+    const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+    return categoryWithDescendants(rows, id);
+  }
+
+  async createCategory(dto: CreateCategoryDto, user: RequestUser): Promise<CategoryNode> {
+    const parentId = dto.parentId ?? null;
+    if (parentId) await this.getCategoryOrThrow(parentId, 'Parent category not found');
+    await this.assertSiblingNameFree(dto.name, parentId);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const c = await tx.category.create({ data: { name: dto.name, parentId } });
+      await audit(tx, user, 'create', 'Category', c.id, null, categorySnapshot(c));
+      return c;
+    });
+    return this.findCategoryNode(created.id);
   }
 
   async updateCategory(
     id: string,
     dto: UpdateCategoryDto,
     user: RequestUser,
-  ): Promise<CategoryDto> {
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const before = await tx.category.findUnique({ where: { id }, select: categorySelect });
-        if (!before) throw new NotFoundException('Category not found');
+  ): Promise<CategoryNode> {
+    const existing = await this.getCategoryOrThrow(id);
+    const name = dto.name ?? existing.name;
+    const parentId = dto.parentId !== undefined ? dto.parentId : existing.parentId;
 
-        const parentId = dto.parentId !== undefined ? dto.parentId : before.parentId;
-        if (parentId) await assertNoCycle(tx, id, parentId);
-        const name = dto.name ?? before.name;
-        if (name !== before.name || parentId !== before.parentId) {
-          await assertNameFree(tx, name, parentId, id);
-        }
+    if (parentId !== existing.parentId && parentId !== null) {
+      await this.getCategoryOrThrow(parentId, 'Parent category not found');
+      const subtree = await this.categoryAndDescendantIds(id);
+      if (subtree.includes(parentId)) {
+        throw new BadRequestException(
+          'A category cannot be moved inside itself or its sub-categories',
+        );
+      }
+    }
+    if (name.toLowerCase() !== existing.name.toLowerCase() || parentId !== existing.parentId) {
+      await this.assertSiblingNameFree(name, parentId, id);
+    }
 
-        const after = await tx.category.update({
-          where: { id },
-          data: { name: dto.name, parentId: dto.parentId, isActive: dto.isActive },
-          select: categorySelect,
-        });
-        await tx.auditLog.create({
-          data: {
-            userId: user.id,
-            action: 'update',
-            entity: 'Category',
-            entityId: id,
-            before: toAuditJson(before),
-            after: toAuditJson(after),
-          },
-        });
-        return after;
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.category.update({
+        where: { id },
+        data: { name, parentId, isActive: dto.isActive ?? existing.isActive },
       });
-    } catch (err) {
-      rethrowPrismaError(err, 'Category');
-    }
-  }
-
-  async formOptions(): Promise<ProductFormOptions> {
-    const [units, categories, taxRates] = await Promise.all([
-      this.listUnits(),
-      this.listCategories(),
-      this.prisma.taxRate.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true, rate: true },
-        orderBy: { rate: 'asc' },
-      }),
-    ]);
-    return {
-      units,
-      categories,
-      taxRates: taxRates.map((t) => ({ ...t, rate: t.rate.toFixed(2) })),
-    };
-  }
-}
-
-type Tx = Parameters<Parameters<PrismaService['$transaction']>[0]>[0];
-
-async function assertNameFree(tx: Tx, name: string, parentId: string | null, exceptId?: string) {
-  const clash = await tx.category.findFirst({
-    where: {
-      name: { equals: name, mode: 'insensitive' },
-      parentId,
-      ...(exceptId && { id: { not: exceptId } }),
-    },
-    select: { id: true },
-  });
-  if (clash) throw new ConflictException('A category with this name already exists here');
-}
-
-/** A category cannot be moved under itself or one of its descendants. */
-async function assertNoCycle(tx: Tx, id: string, newParentId: string) {
-  let current: string | null = newParentId;
-  for (let depth = 0; current && depth < 100; depth++) {
-    if (current === id) {
-      throw new BadRequestException('A category cannot be placed under itself');
-    }
-    const parent: { parentId: string | null } | null = await tx.category.findUnique({
-      where: { id: current },
-      select: { parentId: true },
+      const before = categorySnapshot(existing);
+      const after = categorySnapshot(updated);
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        await audit(tx, user, 'update', 'Category', id, before, after);
+      }
     });
-    if (!parent) throw new BadRequestException('Unknown parent category');
-    current = parent.parentId;
+    return this.findCategoryNode(id);
   }
+
+  private async findCategoryNode(id: string): Promise<CategoryNode> {
+    const all = await this.listCategories(true);
+    return all.find((c) => c.id === id)!;
+  }
+
+  private async getCategoryOrThrow(id: string, message = 'Category not found') {
+    const c = await this.prisma.category.findUnique({ where: { id } });
+    if (!c) throw new NotFoundException(message);
+    return c;
+  }
+
+  /**
+   * Names must be unique among siblings. The database index cannot enforce
+   * this for top-level categories (NULL parents never clash), so check here.
+   */
+  private async assertSiblingNameFree(name: string, parentId: string | null, exceptId?: string) {
+    const clash = await this.prisma.category.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        parentId,
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+    });
+    if (clash) {
+      throw new ConflictException(
+        parentId
+          ? `A sub-category named "${clash.name}" already exists here`
+          : `A top-level category named "${clash.name}" already exists`,
+      );
+    }
+  }
+
+  // ── Units ──────────────────────────────────────────────────────────────────
+
+  async listUnits(): Promise<UnitRow[]> {
+    const rows = await this.prisma.unit.findMany({
+      include: { _count: { select: { baseProducts: true, productUnits: true } } },
+      orderBy: { code: 'asc' },
+    });
+    return rows.map((u) => ({
+      id: u.id,
+      code: u.code,
+      name: u.name,
+      productCount: u._count.baseProducts + u._count.productUnits,
+    }));
+  }
+
+  async createUnit(dto: CreateUnitDto, user: RequestUser): Promise<UnitRow> {
+    const clash = await this.prisma.unit.findUnique({ where: { code: dto.code } });
+    if (clash)
+      throw new ConflictException(`Unit code "${dto.code}" already exists (${clash.name})`);
+    const unit = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.unit.create({ data: { code: dto.code, name: dto.name } });
+      await audit(tx, user, 'create', 'Unit', u.id, null, { code: u.code, name: u.name });
+      return u;
+    });
+    return { id: unit.id, code: unit.code, name: unit.name, productCount: 0 };
+  }
+
+  /** Only the name can change: the code is printed on documents and used in imports. */
+  async updateUnit(id: string, dto: UpdateUnitDto, user: RequestUser): Promise<UnitRow> {
+    const existing = await this.prisma.unit.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Unit not found');
+    if (existing.name !== dto.name) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.unit.update({ where: { id }, data: { name: dto.name } });
+        await audit(tx, user, 'update', 'Unit', id, { name: existing.name }, { name: dto.name });
+      });
+    }
+    return (await this.listUnits()).find((u) => u.id === id)!;
+  }
+}
+
+function categorySnapshot(c: { name: string; parentId: string | null; isActive: boolean }) {
+  return { name: c.name, parentId: c.parentId, isActive: c.isActive };
 }

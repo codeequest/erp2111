@@ -11,7 +11,7 @@ import type {
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/types/request-user';
 import { StockLevelsQueryDto, StockMovesQueryDto } from './dto/stock.dto';
-import { canSeeCost } from './products.service';
+import { canSeeCost } from './stock-ledger';
 
 const ZERO = new Prisma.Decimal(0);
 const warehouseSelect = { id: true, code: true, name: true, isActive: true } as const;

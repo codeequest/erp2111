@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
@@ -14,11 +15,13 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { NAVIGATION, type PermissionCode } from '@erp/shared';
+import { NAVIGATION, type LowStockSummary, type PermissionCode } from '@erp/shared';
+import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ITEM_ICONS, MODULE_COLORS, MODULE_ICONS } from '@/components/icons';
 
 interface Kpi {
+  key?: 'lowStock';
   label: string;
   icon: LucideIcon;
   hint: string;
@@ -35,6 +38,7 @@ const KPIS: Kpi[] = [
     permission: 'sales.order.read',
   },
   {
+    key: 'lowStock',
     label: 'Low-stock items',
     icon: AlertTriangle,
     hint: 'Inventory module',
@@ -91,6 +95,15 @@ export default function DashboardPage() {
   const actions = QUICK_ACTIONS.filter((a) => can(a.permission));
   const firstName = user?.fullName.split(' ')[0];
 
+  const showLowStock = can('inventory.stock.read') && can('dashboard.summary.view');
+  const [lowStock, setLowStock] = useState<LowStockSummary | null>(null);
+  useEffect(() => {
+    if (!showLowStock) return;
+    api<LowStockSummary>('/dashboard/low-stock')
+      .then(setLowStock)
+      .catch(() => setLowStock(null));
+  }, [showLowStock]);
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <div>
@@ -107,16 +120,22 @@ export default function DashboardPage() {
 
       {kpis.length > 0 && (
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((kpi) => (
-            <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-500">{kpi.label}</p>
-                <kpi.icon className="size-5 text-slate-400" />
+          {kpis.map((kpi) =>
+            kpi.key === 'lowStock' && lowStock ? (
+              <LowStockCard key={kpi.label} kpi={kpi} data={lowStock} />
+            ) : (
+              <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-slate-500">{kpi.label}</p>
+                  <kpi.icon className="size-5 text-slate-400" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold text-slate-300">—</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Available once the {kpi.hint} is built
+                </p>
               </div>
-              <p className="mt-3 text-3xl font-semibold text-slate-300">—</p>
-              <p className="mt-1 text-xs text-slate-400">Available once the {kpi.hint} is built</p>
-            </div>
-          ))}
+            ),
+          )}
         </section>
       )}
 
@@ -189,5 +208,38 @@ export default function DashboardPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function LowStockCard({ kpi, data }: { kpi: Kpi; data: LowStockSummary }) {
+  const alert = data.count > 0;
+  return (
+    <Link
+      href="/inventory/products?lowStock=1"
+      className={clsx(
+        'group rounded-xl border bg-white p-5 transition hover:shadow-sm',
+        alert
+          ? 'border-amber-200 hover:border-amber-300'
+          : 'border-slate-200 hover:border-slate-300',
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-slate-500">{kpi.label}</p>
+        <kpi.icon className={clsx('size-5', alert ? 'text-amber-500' : 'text-slate-400')} />
+      </div>
+      <p
+        className={clsx('mt-3 text-3xl font-semibold', alert ? 'text-amber-600' : 'text-slate-900')}
+      >
+        {data.count}
+      </p>
+      <p className="mt-1 truncate text-xs text-slate-500">
+        {alert
+          ? data.items
+              .slice(0, 2)
+              .map((i) => i.name)
+              .join(', ') + (data.count > 2 ? ` and ${data.count - 2} more` : '')
+          : 'Every product is above its minimum'}
+      </p>
+    </Link>
   );
 }

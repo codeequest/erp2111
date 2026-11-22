@@ -14,7 +14,7 @@ import {
 import type { Paginated, StockAdjustmentListItem, WarehouseDto } from '@erp/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatAmount, formatQty } from '@/lib/format';
+import { formatMoney, formatQty } from '@/lib/format';
 import { AccessDenied, Breadcrumbs } from '@/components/page-header';
 
 export default function AdjustmentsPage() {
@@ -203,7 +203,7 @@ export default function AdjustmentsPage() {
                               )}
                             >
                               {value > 0 ? '+' : ''}
-                              {formatAmount(a.valueChange)}
+                              {formatMoney(a.valueChange)}
                             </td>
                           )}
                           <td className="hidden px-4 py-2.5 whitespace-nowrap text-slate-600 2xl:table-cell">

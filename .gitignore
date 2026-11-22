@@ -24,3 +24,6 @@ Thumbs.db
 
 # Playwright MCP screenshots/logs
 .playwright-mcp/
+
+# uploaded files (product images)
+apps/api/uploads/

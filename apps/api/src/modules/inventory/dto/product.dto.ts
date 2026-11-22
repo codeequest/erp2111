@@ -1,32 +1,39 @@
-import { ApiProperty, ApiPropertyOptional, PartialType, PickType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
-import type { ProductSortField, ProductStatusFilter } from '@erp/shared';
+import {
+  PRODUCT_SORT_FIELDS,
+  PRODUCT_STATUS_FILTERS,
+  type ProductSortField,
+  type ProductStatusFilter,
+} from '@erp/shared';
+
+/** Non-negative decimal with up to 4 decimals, sent as a string: "12", "9.99", "0.1250". */
+const DECIMAL = /^\d{1,14}(\.\d{1,4})?$/;
+const DECIMAL_MESSAGE = '$property must be a non-negative number with at most 4 decimals';
 
 /** Trims strings; turns "" into null so optional fields can be cleared. */
 const trimToNull = ({ value }: { value: unknown }) => {
   if (typeof value !== 'string') return value;
-  const t = value.trim();
-  return t === '' ? null : t;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
 };
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
-const MONEY = { maxDecimalPlaces: 4 } as const;
-const MAX_AMOUNT = 99_999_999_999_999; // fits Decimal(18, 4)
-
 export class CreateProductDto {
-  @ApiProperty({ example: 'COF-500' })
+  @ApiProperty({ example: 'SKU-0001' })
   @Transform(trim)
   @IsString()
   @MinLength(1)
@@ -40,7 +47,7 @@ export class CreateProductDto {
   @MaxLength(64)
   barcode?: string | null;
 
-  @ApiProperty({ example: 'Ground coffee 500 g' })
+  @ApiProperty({ example: 'Olive oil 1L' })
   @Transform(trim)
   @IsString()
   @MinLength(1)
@@ -60,7 +67,7 @@ export class CreateProductDto {
   @IsUUID()
   categoryId?: string | null;
 
-  @ApiProperty({ format: 'uuid', description: 'Stock is kept in this unit' })
+  @ApiProperty({ format: 'uuid' })
   @IsUUID()
   baseUnitId: string;
 
@@ -70,44 +77,48 @@ export class CreateProductDto {
   @IsUUID()
   taxRateId?: string | null;
 
-  @ApiProperty({ example: 12.5 })
-  @IsNumber(MONEY)
-  @Min(0)
-  @Max(MAX_AMOUNT)
-  salePrice: number;
+  @ApiProperty({ example: '12.50' })
+  @Transform(trim)
+  @Matches(DECIMAL, { message: DECIMAL_MESSAGE })
+  salePrice: string;
 
-  @ApiPropertyOptional({ example: 10, description: 'Low-stock threshold, in the base unit' })
+  @ApiPropertyOptional({ example: '10' })
+  @Transform(trim)
   @IsOptional()
-  @IsNumber(MONEY)
-  @Min(0)
-  @Max(MAX_AMOUNT)
-  minStock?: number;
+  @Matches(DECIMAL, { message: DECIMAL_MESSAGE })
+  minStock?: string;
 }
 
-/** Every field optional. Average cost is never editable here (it comes from receipts). */
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
 
 export class ListProductsQueryDto {
-  @ApiPropertyOptional({ description: 'Matches SKU, barcode or name' })
-  @Transform(trim)
+  @ApiPropertyOptional({ description: 'Matches name, SKU or barcode' })
+  @Transform(trimToNull)
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  search?: string;
+  search?: string | null;
 
   @ApiPropertyOptional({ format: 'uuid' })
+  @Transform(trimToNull)
   @IsOptional()
   @IsUUID()
-  categoryId?: string;
+  categoryId?: string | null;
 
-  @ApiPropertyOptional({ enum: ['active', 'inactive', 'all'], default: 'active' })
+  @ApiPropertyOptional({ description: 'Only active products below their minimum stock' })
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
   @IsOptional()
-  @IsIn(['active', 'inactive', 'all'])
+  @IsBoolean()
+  lowStock?: boolean;
+
+  @ApiPropertyOptional({ enum: PRODUCT_STATUS_FILTERS, default: 'active' })
+  @IsOptional()
+  @IsIn(PRODUCT_STATUS_FILTERS)
   status: ProductStatusFilter = 'active';
 
-  @ApiPropertyOptional({ enum: ['name', 'sku', 'salePrice', 'createdAt'], default: 'name' })
+  @ApiPropertyOptional({ enum: PRODUCT_SORT_FIELDS, default: 'name' })
   @IsOptional()
-  @IsIn(['name', 'sku', 'salePrice', 'createdAt'])
+  @IsIn(PRODUCT_SORT_FIELDS)
   sort: ProductSortField = 'name';
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'asc' })
@@ -130,12 +141,3 @@ export class ListProductsQueryDto {
   @Max(100)
   pageSize: number = 25;
 }
-
-/** Same filters and sort as the list, without pagination (every matching product). */
-export class ExportProductsQueryDto extends PickType(ListProductsQueryDto, [
-  'search',
-  'categoryId',
-  'status',
-  'sort',
-  'order',
-] as const) {}

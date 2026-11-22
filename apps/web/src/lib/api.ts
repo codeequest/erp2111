@@ -45,8 +45,7 @@ export function refreshSession(): Promise<AuthResponse | null> {
   return refreshInFlight;
 }
 
-/** Authenticated fetch with one refresh-and-retry on 401; throws ApiRequestError when not ok. */
-async function request(path: string, init: RequestInit, retry: boolean): Promise<Response> {
+export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   // FormData sets its own multipart Content-Type (with the boundary).
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -58,7 +57,7 @@ async function request(path: string, init: RequestInit, retry: boolean): Promise
 
   if (res.status === 401 && retry && !path.startsWith('/auth/')) {
     const session = await refreshSession();
-    if (session) return request(path, init, false);
+    if (session) return api<T>(path, init, false);
     onSessionExpired?.();
   }
 
@@ -66,26 +65,32 @@ async function request(path: string, init: RequestInit, retry: boolean): Promise
     const body = (await res.json().catch(() => undefined)) as ApiError | undefined;
     throw new ApiRequestError(res.status, body);
   }
-  return res;
-}
-
-export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-  const res = await request(path, init, retry);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
-/** Downloads a file endpoint and hands it to the browser as a download. */
-export async function apiDownload(path: string, fallbackName: string): Promise<void> {
-  const res = await request(path, {}, true);
-  const disposition = res.headers.get('Content-Disposition') ?? '';
-  const name = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? fallbackName;
+/**
+ * Downloads a file from the API (with the access token) and saves it in the browser.
+ * Plain links cannot be used because the token is never stored in a cookie.
+ */
+export async function apiDownload(path: string, fallbackName: string, retry = true): Promise<void> {
+  const headers = new Headers();
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const res = await fetch(`${BASE}${path}`, { headers, credentials: 'include' });
+  if (res.status === 401 && retry) {
+    if (await refreshSession()) return apiDownload(path, fallbackName, false);
+    onSessionExpired?.();
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => undefined)) as ApiError | undefined;
+    throw new ApiRequestError(res.status, body);
+  }
+  const name =
+    /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
   a.href = url;
   a.download = name;
-  document.body.appendChild(a);
   a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

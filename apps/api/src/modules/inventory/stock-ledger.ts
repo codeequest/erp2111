@@ -1,4 +1,5 @@
 import { Prisma, StockMoveType } from '@prisma/client';
+import { RequestUser } from '../../common/types/request-user';
 
 /**
  * Low-level stock ledger writes. Every module that moves stock (adjustments,
@@ -63,4 +64,9 @@ export async function postMove(
     },
     data: { quantity: newBalance },
   });
+}
+
+/** Costs and stock values are shown only with inventory.cost.view. */
+export function canSeeCost(user: RequestUser): boolean {
+  return user.permissions.has('inventory.cost.view');
 }
