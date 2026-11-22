@@ -22,5 +22,8 @@ Thumbs.db
 # local Claude settings
 .claude/settings.local.json
 
+# Playwright MCP screenshots/logs
+.playwright-mcp/
+
 # uploaded files (product images)
 apps/api/uploads/

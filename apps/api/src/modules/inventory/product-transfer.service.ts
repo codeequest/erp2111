@@ -10,11 +10,34 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/types/request-user';
 import { audit } from '../../common/audit';
 import { detectDelimiter, parseCsv, toCsv } from '../../common/csv';
+import { readXlsxTable, writeXlsx } from '../../common/xlsx';
 import { CatalogService } from './catalog.service';
 import { ListProductsQueryDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
 
 export const MAX_IMPORT_ROWS = 5000;
+
+const XLSX_WIDTHS: Record<string, number> = {
+  sku: 16,
+  barcode: 18,
+  name: 36,
+  description: 40,
+  category: 24,
+  base_unit: 10,
+  tax_rate: 14,
+  active: 8,
+};
+
+const XLSX_INSTRUCTIONS = [
+  'Importing products from this workbook',
+  '',
+  '• Edit the "Products" sheet, then use Products › Import. Do not rename the column headers.',
+  '• Products are matched by SKU: a known SKU is updated, an unknown SKU creates a product (name, base_unit and sale_price are then required).',
+  '• Delete a column to leave its values unchanged. An empty cell clears barcode, description, category or tax_rate.',
+  '• category is a path that must already exist, e.g. "Food › Oils" (or "Food > Oils").',
+  '• active is yes or no. average_cost is informative only and is ignored by the import.',
+  '• You first get a preview; nothing is saved until you confirm. Rows with errors are skipped.',
+];
 
 type Column = (typeof PRODUCT_CSV_COLUMNS)[number];
 
@@ -62,6 +85,56 @@ export class ProductTransferService {
   // ── Export ─────────────────────────────────────────────────────────────────
 
   async exportCsv(query: ListProductsQueryDto, user: RequestUser): Promise<string> {
+    const { header, lines } = await this.exportTable(query, user);
+    return toCsv([header, ...lines]);
+  }
+
+  /** Same columns as the CSV, so an exported workbook can be edited and imported back. */
+  async exportXlsx(query: ListProductsQueryDto, user: RequestUser): Promise<Buffer> {
+    const { header, lines } = await this.exportTable(query, user);
+    const numeric = new Set(['sale_price', 'min_stock', 'average_cost']);
+    const numCols = header.flatMap((h, i) => (numeric.has(h) ? [i] : []));
+    const rows = lines.map((line) =>
+      line.map((v, i) => (numCols.includes(i) && v !== null ? Number(v) : v)),
+    );
+    return writeXlsx([
+      {
+        name: 'Products',
+        rows: [header, ...rows],
+        widths: header.map((h) => XLSX_WIDTHS[h] ?? 14),
+        numFmt: Object.fromEntries(numCols.map((i) => [i, '#,##0.00##'])),
+      },
+      { name: 'Instructions', rows: XLSX_INSTRUCTIONS.map((l) => [l]), widths: [110] },
+    ]);
+  }
+
+  /** An empty workbook with the import columns and one example row. */
+  importTemplateXlsx(): Promise<Buffer> {
+    return writeXlsx([
+      {
+        name: 'Products',
+        rows: [
+          [...PRODUCT_CSV_COLUMNS],
+          [
+            'SKU-0001',
+            '6190000000011',
+            'Olive oil 1L',
+            'Extra virgin',
+            'Food › Oils',
+            'PCS',
+            'VAT 19%',
+            12.5,
+            5,
+            'yes',
+          ],
+        ],
+        widths: PRODUCT_CSV_COLUMNS.map((h) => XLSX_WIDTHS[h] ?? 14),
+      },
+      { name: 'Instructions', rows: XLSX_INSTRUCTIONS.map((l) => [l]), widths: [110] },
+    ]);
+  }
+
+  private async exportTable(query: ListProductsQueryDto, user: RequestUser) {
     const canSeeCost = user.permissions.has('inventory.cost.view');
     const where = await this.products.buildWhere(query);
     const rows = await this.prisma.product.findMany({
@@ -89,7 +162,7 @@ export class ProductTransferService {
       if (canSeeCost) line.push(p.averageCost.toString());
       return line;
     });
-    return toCsv([header, ...lines]);
+    return { header, lines };
   }
 
   // ── Import ─────────────────────────────────────────────────────────────────
@@ -103,7 +176,28 @@ export class ProductTransferService {
    */
   async importCsv(text: string, dryRun: boolean, user: RequestUser): Promise<ImportReport> {
     const delimiter = detectDelimiter(text);
-    const table = parseCsv(text, delimiter);
+    // Excel in comma-decimal locales writes "12,50" in ";" files.
+    return this.importTable(parseCsv(text, delimiter), delimiter === ';', dryRun, user);
+  }
+
+  /** Same rules as the CSV import; reads the "Products" sheet, or the first one. */
+  async importXlsx(file: Buffer, dryRun: boolean, user: RequestUser): Promise<ImportReport> {
+    let table: string[][];
+    try {
+      table = await readXlsxTable(file, 'Products');
+    } catch {
+      throw new BadRequestException('The file is not a valid Excel (.xlsx) workbook');
+    }
+    // Numbers typed as text in a French Excel ("12,50") are accepted too.
+    return this.importTable(table, true, dryRun, user);
+  }
+
+  private async importTable(
+    table: string[][],
+    commaDecimals: boolean,
+    dryRun: boolean,
+    user: RequestUser,
+  ): Promise<ImportReport> {
     if (table.length < 2) throw new BadRequestException('The file has no product rows');
     if (table.length - 1 > MAX_IMPORT_ROWS) {
       throw new BadRequestException(`At most ${MAX_IMPORT_ROWS} rows can be imported at once`);
@@ -121,8 +215,7 @@ export class ProductTransferService {
     }
 
     const ctx = await this.loadContext();
-    // Excel in comma-decimal locales writes "12,50" in ";" files.
-    const num = (v: string) => (delimiter === ';' ? v.replace(/^(\d+),(\d+)$/, '$1.$2') : v);
+    const num = (v: string) => (commaDecimals ? v.replace(/^(\d+),(\d+)$/, '$1.$2') : v);
 
     const results: ImportRowResult[] = [];
     const planned: { values: RowValues; existing?: ExistingProduct; line: number }[] = [];

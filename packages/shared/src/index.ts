@@ -3,3 +3,4 @@ export * from './roles';
 export * from './navigation';
 export * from './auth';
 export * from './products';
+export * from './inventory';

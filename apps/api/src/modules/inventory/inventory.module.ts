@@ -13,6 +13,8 @@ import { ProductTransferService } from './product-transfer.service';
 import { ProductImagesController } from './product-images.controller';
 import { PriceListsController } from './price-lists.controller';
 import { PriceListsService } from './price-lists.service';
+import { StockService } from './stock.service';
+import { AdjustmentsService } from './adjustments.service';
 
 @Module({
   controllers: [
@@ -32,7 +34,9 @@ import { PriceListsService } from './price-lists.service';
     ProductHistoryService,
     ProductTransferService,
     PriceListsService,
+    StockService,
+    AdjustmentsService,
   ],
-  exports: [InventoryService, ProductsService, CatalogService],
+  exports: [InventoryService, ProductsService, CatalogService, StockService, AdjustmentsService],
 })
 export class InventoryModule {}

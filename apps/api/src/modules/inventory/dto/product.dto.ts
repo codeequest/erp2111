@@ -141,3 +141,11 @@ export class ListProductsQueryDto {
   @Max(100)
   pageSize: number = 25;
 }
+
+/** The list filters, plus the file format of the export. */
+export class ExportProductsQueryDto extends ListProductsQueryDto {
+  @ApiPropertyOptional({ enum: ['csv', 'xlsx'], default: 'csv' })
+  @IsOptional()
+  @IsIn(['csv', 'xlsx'])
+  format: 'csv' | 'xlsx' = 'csv';
+}

@@ -1,40 +1,75 @@
-import { Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type {
+  Paginated,
+  StockAdjustmentListItem,
+  StockAdjustmentResult,
+  StockLevelsResponse,
+  StockMoveRow,
+} from '@erp/shared';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
-import { InventoryService } from './inventory.service';
+import { RequestUser } from '../../common/types/request-user';
+import { AdjustmentsService } from './adjustments.service';
+import {
+  AdjustmentsQueryDto,
+  CreateAdjustmentDto,
+  StockLevelsQueryDto,
+  StockMovesQueryDto,
+} from './dto/stock.dto';
+import { StockService } from './stock.service';
 
 /**
- * SKELETON — every endpoint answers 501 Not Implemented.
- * Routes and permissions are final; replace notImplemented(...) with calls to
- * InventoryService and add DTOs (class-validator) for request bodies.
+ * Levels, moves and adjustments are built. Transfers and opening balances still
+ * answer 501 Not Implemented.
  */
 @ApiTags('Inventory · Stock')
 @Controller('inventory/stock')
 export class StockController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly stock: StockService,
+    private readonly adjustmentsService: AdjustmentsService,
+  ) {}
 
   @Get('levels')
   @RequirePermissions('inventory.stock.read')
   @ApiOperation({ summary: 'On-hand quantity per product and warehouse' })
-  getLevels() {
-    return notImplemented('Inventory · Stock: On-hand quantity per product and warehouse');
+  getLevels(
+    @Query() query: StockLevelsQueryDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<StockLevelsResponse> {
+    return this.stock.levels(query, user);
   }
 
   @Get('moves')
   @RequirePermissions('inventory.stock.read')
   @ApiOperation({ summary: 'Stock ledger (filter by product, warehouse, date, type)' })
-  getMoves() {
-    return notImplemented(
-      'Inventory · Stock: Stock ledger (filter by product, warehouse, date, type)',
-    );
+  getMoves(
+    @Query() query: StockMovesQueryDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<Paginated<StockMoveRow>> {
+    return this.stock.moves(query, user);
+  }
+
+  @Get('adjustments')
+  @RequirePermissions('inventory.stock.read')
+  @ApiOperation({ summary: 'Posted stock adjustments, newest first, with their lines' })
+  listAdjustments(
+    @Query() query: AdjustmentsQueryDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<Paginated<StockAdjustmentListItem>> {
+    return this.adjustmentsService.list(query, user);
   }
 
   @Post('adjustments')
   @RequirePermissions('inventory.stock.adjust')
   @ApiOperation({ summary: 'Post a stock adjustment (reason required)' })
-  adjustments() {
-    return notImplemented('Inventory · Stock: Post a stock adjustment (reason required)');
+  adjustments(
+    @Body() dto: CreateAdjustmentDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<StockAdjustmentResult> {
+    return this.adjustmentsService.create(dto, user);
   }
 
   @Post('transfers')

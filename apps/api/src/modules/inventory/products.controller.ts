@@ -12,6 +12,7 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -21,7 +22,13 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { RequestUser } from '../../common/types/request-user';
 import { SetPackUnitsDto } from './dto/catalog.dto';
-import { CreateProductDto, ListProductsQueryDto, UpdateProductDto } from './dto/product.dto';
+import {
+  CreateProductDto,
+  ExportProductsQueryDto,
+  ListProductsQueryDto,
+  UpdateProductDto,
+} from './dto/product.dto';
+import { XLSX_MIME, isXlsx } from '../../common/xlsx';
 import { ProductsService } from './products.service';
 import { BulkProductDto, ImportQueryDto } from './dto/phase3.dto';
 import { MAX_IMAGE_BYTES, ProductBulkService, UploadedFileData } from './product-bulk.service';
@@ -65,11 +72,32 @@ export class ProductsController {
 
   @Get('export')
   @RequirePermissions('inventory.product.read')
-  @Header('Content-Type', 'text/csv; charset=utf-8')
-  @Header('Content-Disposition', 'attachment; filename="products.csv"')
-  @ApiOperation({ summary: 'Download the products matching the list filters as CSV' })
-  exportCsv(@Query() query: ListProductsQueryDto, @CurrentUser() user: RequestUser) {
-    return this.transferService.exportCsv(query, user);
+  @ApiOperation({
+    summary: 'Download the products matching the list filters as CSV or Excel (format=xlsx)',
+  })
+  async export(@Query() query: ExportProductsQueryDto, @CurrentUser() user: RequestUser) {
+    const date = new Date().toISOString().slice(0, 10);
+    if (query.format === 'xlsx') {
+      const file = await this.transferService.exportXlsx(query, user);
+      return new StreamableFile(file, {
+        type: XLSX_MIME,
+        disposition: `attachment; filename="products-${date}.xlsx"`,
+      });
+    }
+    const csv = await this.transferService.exportCsv(query, user);
+    return new StreamableFile(Buffer.from(csv, 'utf8'), {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="products-${date}.csv"`,
+    });
+  }
+
+  @Get('import-template')
+  @RequirePermissions('inventory.product.write')
+  @Header('Content-Type', XLSX_MIME)
+  @Header('Content-Disposition', 'attachment; filename="products-template.xlsx"')
+  @ApiOperation({ summary: 'Excel template for the product import (columns + one example row)' })
+  async importTemplate() {
+    return new StreamableFile(await this.transferService.importTemplateXlsx());
   }
 
   @Post('bulk')
@@ -191,14 +219,22 @@ export class ProductsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody(FILE_BODY)
   @ApiOperation({
-    summary: 'Import products from CSV, matched by SKU. dryRun=true (default) only previews.',
+    summary:
+      'Import products from CSV or Excel (.xlsx), matched by SKU. dryRun=true (default) only previews.',
   })
   import(
     @Query() query: ImportQueryDto,
     @UploadedFile() file: UploadedFileData | undefined,
     @CurrentUser() user: RequestUser,
   ) {
-    if (!file) throw new BadRequestException('Attach a CSV file in the "file" field');
+    if (!file) throw new BadRequestException('Attach a CSV or Excel file in the "file" field');
+    const name = file.originalname.toLowerCase();
+    if (name.endsWith('.xls')) {
+      throw new BadRequestException('Old .xls files are not supported: save the file as .xlsx');
+    }
+    if (name.endsWith('.xlsx') || isXlsx(file.buffer)) {
+      return this.transferService.importXlsx(file.buffer, query.dryRun, user);
+    }
     return this.transferService.importCsv(file.buffer.toString('utf8'), query.dryRun, user);
   }
 }
