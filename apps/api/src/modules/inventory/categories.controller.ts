@@ -18,7 +18,7 @@ export class CategoriesController {
   @RequirePermissions('inventory.product.read')
   @ApiOperation({ summary: 'List categories (tree)' })
   findAll() {
-    return notImplemented('Inventory · Categories & units: List categories (tree)');
+    return this.inventoryService.listCategories();
   }
 
   @Post()
