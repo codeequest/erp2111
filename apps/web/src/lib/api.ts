@@ -45,16 +45,21 @@ export function refreshSession(): Promise<AuthResponse | null> {
   return refreshInFlight;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+/** Sends the request with auth + one refresh retry; throws ApiRequestError on any non-2xx. */
+async function request(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData sets its own multipart Content-Type (with the boundary).
+  const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  if (init.body && !isForm && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });
 
   if (res.status === 401 && retry && !path.startsWith('/auth/')) {
     const session = await refreshSession();
-    if (session) return api<T>(path, init, false);
+    if (session) return request(path, init, false);
     onSessionExpired?.();
   }
 
@@ -62,6 +67,29 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
     const body = (await res.json().catch(() => undefined)) as ApiError | undefined;
     throw new ApiRequestError(res.status, body);
   }
+  return res;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await request(path, init);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** For binary responses: images, CSV files. */
+export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  return (await request(path, init)).blob();
+}
+
+/** Downloads a file from the API (the token is in memory, so a plain <a href> would not be authorised). */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const res = await request(path);
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

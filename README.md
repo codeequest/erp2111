@@ -52,13 +52,14 @@ pnpm dev            # API on :4000, web on :3000
 apps/api/src
 ├── common/        guards (JWT + permissions), decorators, helpers
 ├── core/          auth ✅, users, roles, settings, audit
-├── modules/       dashboard, inventory, purchasing, sales, invoicing   ← skeletons
+├── modules/       dashboard, inventory, purchasing, sales, invoicing   ← skeletons (Inventory › Products ✅)
 ├── health/
 └── prisma/
 apps/web/src
 ├── app/login                login page ✅
 ├── app/(erp)/layout.tsx     sidebar + top bar ✅
 ├── app/(erp)/dashboard      main ERP page ✅
+├── app/(erp)/inventory/products  products, categories & units ✅
 └── app/(erp)/[...slug]      placeholder for every screen not built yet
 ```
 
