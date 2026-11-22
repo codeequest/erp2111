@@ -1,0 +1,46 @@
+# Local addition: runs the API and the web app in Docker next to PostgreSQL.
+# `docker compose up -d --build` starts everything.
+services:
+  api:
+    build: .
+    image: erp-app:local
+    container_name: rep-api
+    restart: unless-stopped
+    env_file: apps/api/.env
+    environment:
+      DATABASE_URL: postgresql://erp:erp@postgres:5432/erp?schema=public
+      WEB_ORIGIN: http://localhost:3000
+    command: >
+      sh -c "pnpm --filter @erp/api prisma:deploy &&
+             pnpm --filter @erp/api prisma:seed &&
+             node apps/api/dist/main.js"
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: erp-app:local
+    pull_policy: never
+    container_name: rep-web
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:4000
+    command: pnpm --filter @erp/web start
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+
+  # Web interface to browse the database: http://localhost:8081
+  adminer:
+    image: adminer:4.8.1
+    container_name: rep-adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      - postgres
