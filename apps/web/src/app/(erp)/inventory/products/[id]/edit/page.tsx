@@ -43,7 +43,11 @@ export default function EditProductPage() {
       ) : !product ? (
         <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
       ) : (
-        <ProductForm product={product} cancelHref={detailHref} onSaved={() => router.push(detailHref)} />
+        <ProductForm
+          product={product}
+          cancelHref={detailHref}
+          onSaved={() => router.push(detailHref)}
+        />
       )}
     </div>
   );

@@ -6,15 +6,29 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type {
+  BarcodeMatch,
+  LowStockSummary,
   Paginated,
   ProductDetail,
   ProductListItem,
   ProductLookups,
+  ProductPackUnit,
   ProductStockMove,
 } from '@erp/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/types/request-user';
+import { audit } from '../../common/audit';
+import { CatalogService } from './catalog.service';
+import { SetPackUnitsDto } from './dto/catalog.dto';
 import { CreateProductDto, ListProductsQueryDto, UpdateProductDto } from './dto/product.dto';
+
+const PACK_UNIT_INCLUDE = {
+  unit: { select: { id: true, code: true, name: true } },
+} satisfies Prisma.ProductUnitInclude;
+
+type PackUnitWithUnit = Prisma.ProductUnitGetPayload<{ include: typeof PACK_UNIT_INCLUDE }>;
+
+const LOW_STOCK_PREVIEW = 10;
 
 const LIST_INCLUDE = {
   category: { select: { id: true, name: true } },
@@ -47,14 +61,28 @@ const AUDITED_FIELDS = [
  */
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalog: CatalogService,
+  ) {}
 
   // ── Reads ──────────────────────────────────────────────────────────────────
 
-  async findAll(query: ListProductsQueryDto, user: RequestUser): Promise<Paginated<ProductListItem>> {
+  async findAll(
+    query: ListProductsQueryDto,
+    user: RequestUser,
+  ): Promise<Paginated<ProductListItem>> {
     const where: Prisma.ProductWhereInput = {};
+    const and: Prisma.ProductWhereInput[] = [];
     if (query.status !== 'all') where.isActive = query.status === 'active';
-    if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.categoryId) {
+      // A category includes the products of all its sub-categories.
+      where.categoryId = { in: await this.catalog.categoryAndDescendantIds(query.categoryId) };
+    }
+    if (query.lowStock) {
+      and.push({ id: { in: (await this.lowStockRows()).map((r) => r.id) } });
+    }
+    if (and.length) where.AND = and;
     if (query.search) {
       const contains = { contains: query.search, mode: 'insensitive' as const };
       where.OR = [{ name: contains }, { sku: contains }, { barcode: contains }];
@@ -93,6 +121,7 @@ export class ProductsService {
           include: { warehouse: { select: { id: true, code: true, name: true } } },
           orderBy: { warehouse: { code: 'asc' } },
         },
+        units: { include: PACK_UNIT_INCLUDE, orderBy: { factor: 'asc' } },
       },
     });
     if (!product) throw new NotFoundException('Product not found');
@@ -107,12 +136,17 @@ export class ProductsService {
       ...toListItem(product, total, canSeeCost),
       description: product.description,
       taxRate: product.taxRate
-        ? { id: product.taxRate.id, name: product.taxRate.name, rate: product.taxRate.rate.toString() }
+        ? {
+            id: product.taxRate.id,
+            name: product.taxRate.name,
+            rate: product.taxRate.rate.toString(),
+          }
         : null,
       stockByWarehouse: product.stockBalances.map((b) => ({
         warehouse: b.warehouse,
         quantity: b.quantity.toString(),
       })),
+      packUnits: product.units.map(toPackUnit),
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
     };
@@ -144,12 +178,8 @@ export class ProductsService {
   }
 
   async lookups(): Promise<ProductLookups> {
-    const [categories, units, taxRates] = await this.prisma.$transaction([
-      this.prisma.category.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-      }),
+    const categories = await this.catalog.listCategories(false);
+    const [units, taxRates] = await this.prisma.$transaction([
       this.prisma.unit.findMany({
         select: { id: true, code: true, name: true },
         orderBy: { code: 'asc' },
@@ -167,7 +197,139 @@ export class ProductsService {
     };
   }
 
+  /** Finds the product a scanned barcode belongs to: its own barcode or a pack size's. */
+  async findByBarcode(code: string, user: RequestUser): Promise<BarcodeMatch> {
+    const barcode = code.trim();
+    const canSeeCost = user.permissions.has('inventory.cost.view');
+
+    const product = await this.prisma.product.findUnique({
+      where: { barcode },
+      include: LIST_INCLUDE,
+    });
+    if (product) {
+      const stock = await this.stockOnHand([product.id]);
+      return { product: toListItem(product, stock.get(product.id), canSeeCost), packUnit: null };
+    }
+
+    const pack = await this.prisma.productUnit.findUnique({
+      where: { barcode },
+      include: { ...PACK_UNIT_INCLUDE, product: { include: LIST_INCLUDE } },
+    });
+    if (pack) {
+      const stock = await this.stockOnHand([pack.productId]);
+      return {
+        product: toListItem(pack.product, stock.get(pack.productId), canSeeCost),
+        packUnit: toPackUnit(pack),
+      };
+    }
+    throw new NotFoundException(`No product has the barcode "${barcode}"`);
+  }
+
+  /** Active products below their minimum stock, largest shortfall first. */
+  async lowStockSummary(): Promise<LowStockSummary> {
+    const rows = await this.lowStockRows();
+    const top = rows.slice(0, LOW_STOCK_PREVIEW);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: top.map((r) => r.id) } },
+      include: { baseUnit: { select: { code: true } } },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return {
+      count: rows.length,
+      items: top.flatMap((r) => {
+        const p = byId.get(r.id);
+        if (!p) return [];
+        return [
+          {
+            id: p.id,
+            sku: p.sku,
+            name: p.name,
+            unitCode: p.baseUnit.code,
+            stockOnHand: r.on_hand.toString(),
+            minStock: p.minStock.toString(),
+          },
+        ];
+      }),
+    };
+  }
+
+  private lowStockRows() {
+    return this.prisma.$queryRaw<{ id: string; on_hand: Prisma.Decimal }[]>`
+      SELECT p.id, COALESCE(SUM(b.quantity), 0) AS on_hand
+      FROM products p
+      LEFT JOIN stock_balances b ON b.product_id = p.id
+      WHERE p.is_active AND p.min_stock > 0
+      GROUP BY p.id, p.min_stock
+      HAVING COALESCE(SUM(b.quantity), 0) < p.min_stock
+      ORDER BY p.min_stock - COALESCE(SUM(b.quantity), 0) DESC, p.id`;
+  }
+
   // ── Writes ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Replaces the product's pack sizes (e.g. 1 CTN = 24 PCS) with the given list.
+   * Order lines store the unit itself, not these rows, so replacing them is safe.
+   */
+  async setPackUnits(id: string, dto: SetPackUnitsDto, user: RequestUser): Promise<ProductDetail> {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { units: { include: PACK_UNIT_INCLUDE } },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+
+    const seenUnits = new Set<string>();
+    const seenBarcodes = new Set<string>();
+    for (const u of dto.units) {
+      if (u.unitId === product.baseUnitId) {
+        throw new BadRequestException('The base unit cannot also be a pack size');
+      }
+      if (seenUnits.has(u.unitId))
+        throw new BadRequestException('Each unit can be listed only once');
+      seenUnits.add(u.unitId);
+      if (new Prisma.Decimal(u.factor).lte(0)) {
+        throw new BadRequestException('factor must be greater than 0');
+      }
+      if (u.barcode) {
+        if (seenBarcodes.has(u.barcode) || u.barcode === product.barcode) {
+          throw new BadRequestException(`Barcode "${u.barcode}" is used twice on this product`);
+        }
+        seenBarcodes.add(u.barcode);
+      }
+    }
+
+    if (seenUnits.size) {
+      const found = await this.prisma.unit.count({ where: { id: { in: [...seenUnits] } } });
+      if (found !== seenUnits.size) throw new BadRequestException('Unit not found');
+    }
+    for (const barcode of seenBarcodes) await this.assertBarcodeFree(barcode, { packsOf: id });
+
+    await this.runWrite(async (tx) => {
+      await tx.productUnit.deleteMany({ where: { productId: id } });
+      if (dto.units.length) {
+        await tx.productUnit.createMany({
+          data: dto.units.map((u) => ({
+            productId: id,
+            unitId: u.unitId,
+            factor: u.factor,
+            forPurchase: u.forPurchase,
+            forSale: u.forSale,
+            barcode: u.barcode ?? null,
+          })),
+        });
+      }
+      await audit(
+        tx,
+        user,
+        'update',
+        'Product',
+        id,
+        { packUnits: product.units.map(packSnapshot) },
+        { packUnits: dto.units.map((u) => packSnapshot({ ...u, barcode: u.barcode ?? null })) },
+      );
+    });
+
+    return this.findOne(id, user);
+  }
 
   async create(dto: CreateProductDto, user: RequestUser): Promise<ProductDetail> {
     await this.assertUnique(dto.sku, dto.barcode ?? null);
@@ -244,7 +406,14 @@ export class ProductsService {
       const after = auditSnapshot(updated);
       if (JSON.stringify(before) !== JSON.stringify(after)) {
         await tx.auditLog.create({
-          data: { userId: user.id, action: 'update', entity: 'Product', entityId: id, before, after },
+          data: {
+            userId: user.id,
+            action: 'update',
+            entity: 'Product',
+            entityId: id,
+            before,
+            after,
+          },
         });
       }
     });
@@ -301,14 +470,39 @@ export class ProductsService {
       });
       if (clash) throw new ConflictException(`SKU "${sku}" is already used by "${clash.name}"`);
     }
-    if (barcode) {
-      const clash = await this.prisma.product.findFirst({
-        where: { barcode, ...not },
-        select: { name: true },
-      });
-      if (clash) {
-        throw new ConflictException(`Barcode "${barcode}" is already used by "${clash.name}"`);
-      }
+    if (barcode) await this.assertBarcodeFree(barcode, { productBarcodeOf: exceptId });
+  }
+
+  /**
+   * A barcode must identify exactly one thing: a product or one of its pack sizes.
+   *  - productBarcodeOf: ignore this product's own barcode (editing the product)
+   *  - packsOf: ignore this product's pack barcodes (they are being replaced)
+   */
+  private async assertBarcodeFree(
+    barcode: string,
+    except: { productBarcodeOf?: string; packsOf?: string },
+  ) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        barcode,
+        ...(except.productBarcodeOf ? { id: { not: except.productBarcodeOf } } : {}),
+      },
+      select: { name: true },
+    });
+    if (product) {
+      throw new ConflictException(`Barcode "${barcode}" is already used by "${product.name}"`);
+    }
+    const pack = await this.prisma.productUnit.findFirst({
+      where: {
+        barcode,
+        ...(except.packsOf ? { productId: { not: except.packsOf } } : {}),
+      },
+      select: { unit: { select: { code: true } }, product: { select: { name: true } } },
+    });
+    if (pack) {
+      throw new ConflictException(
+        `Barcode "${barcode}" is already used by the ${pack.unit.code} pack of "${pack.product.name}"`,
+      );
     }
   }
 
@@ -362,11 +556,39 @@ export function toListItem(
   return item;
 }
 
-function auditSnapshot(p: Record<(typeof AUDITED_FIELDS)[number], unknown>): Prisma.InputJsonObject {
+function auditSnapshot(
+  p: Record<(typeof AUDITED_FIELDS)[number], unknown>,
+): Prisma.InputJsonObject {
   const out: Record<string, string | boolean | null> = {};
   for (const f of AUDITED_FIELDS) {
     const v = p[f];
     out[f] = v === null || typeof v === 'boolean' ? v : String(v);
   }
   return out;
+}
+
+function toPackUnit(u: PackUnitWithUnit): ProductPackUnit {
+  return {
+    unit: u.unit,
+    factor: u.factor.toString(),
+    forPurchase: u.forPurchase,
+    forSale: u.forSale,
+    barcode: u.barcode,
+  };
+}
+
+function packSnapshot(u: {
+  unitId: string;
+  factor: Prisma.Decimal | string;
+  forPurchase: boolean;
+  forSale: boolean;
+  barcode: string | null;
+}) {
+  return {
+    unitId: u.unitId,
+    factor: u.factor.toString(),
+    forPurchase: u.forPurchase,
+    forSale: u.forSale,
+    barcode: u.barcode,
+  };
 }

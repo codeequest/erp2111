@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PermissionCode } from '@erp/shared';
 import { ProductsService, toListItem } from './products.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CatalogService } from './catalog.service';
 import { RequestUser } from '../../common/types/request-user';
 
 const D = (v: string | number) => new Prisma.Decimal(v);
@@ -35,7 +36,7 @@ const product = {
 };
 
 function serviceWith(prisma: Record<string, unknown>) {
-  return new ProductsService(prisma as unknown as PrismaService);
+  return new ProductsService(prisma as unknown as PrismaService, {} as unknown as CatalogService);
 }
 
 describe('toListItem', () => {

@@ -12,7 +12,9 @@ export default function NewProductPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <Breadcrumbs trail={[{ label: 'Products', href: '/inventory/products' }, { label: 'New' }]} />
+        <Breadcrumbs
+          trail={[{ label: 'Products', href: '/inventory/products' }, { label: 'New' }]}
+        />
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">New product</h1>
       </div>
       {can('inventory.product.write') ? (

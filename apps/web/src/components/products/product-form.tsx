@@ -113,7 +113,12 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
             autoFocus={!product}
           />
         </Field>
-        <Field label="Barcode" error={errors.barcode} htmlFor="barcode" hint="Optional, must be unique">
+        <Field
+          label="Barcode"
+          error={errors.barcode}
+          htmlFor="barcode"
+          hint="Optional, must be unique"
+        >
           <input
             id="barcode"
             value={form.barcode}
@@ -154,7 +159,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
             <option value="">No category</option>
             {lookups?.categories.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.path}
               </option>
             ))}
           </select>

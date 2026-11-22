@@ -16,6 +16,7 @@ import {
   btnPrimary,
   btnSecondary,
 } from '@/components/products/ui';
+import { PackUnitsCard } from '@/components/products/pack-units-card';
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +40,9 @@ export default function ProductDetailPage() {
     setError(null);
     try {
       const action = product.isActive ? 'deactivate' : 'activate';
-      setProduct(await api<ProductDetail>(`/inventory/products/${id}/${action}`, { method: 'POST' }));
+      setProduct(
+        await api<ProductDetail>(`/inventory/products/${id}/${action}`, { method: 'POST' }),
+      );
       setConfirming(false);
     } catch (e) {
       setError((e as Error).message);
@@ -52,7 +55,11 @@ export default function ProductDetailPage() {
     return (
       <div className="mx-auto max-w-5xl space-y-6">
         <Breadcrumbs trail={[{ label: 'Products', href: '/inventory/products' }]} />
-        {error ? <ErrorBox message={error} /> : <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />}
+        {error ? (
+          <ErrorBox message={error} />
+        ) : (
+          <Loader2 className="mx-auto size-6 animate-spin text-slate-400" />
+        )}
       </div>
     );
   }
@@ -123,7 +130,8 @@ export default function ProductDetailPage() {
 
       {!product.isActive && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          This product is inactive: it is hidden from new sales and purchase orders but kept in history.
+          This product is inactive: it is hidden from new sales and purchase orders but kept in
+          history.
         </div>
       )}
 
@@ -152,7 +160,11 @@ export default function ProductDetailPage() {
             <Row label="Base unit" value={`${product.baseUnit.code} — ${product.baseUnit.name}`} />
             <Row
               label="Tax rate"
-              value={product.taxRate ? `${product.taxRate.name} (${product.taxRate.rate}%)` : 'Company default'}
+              value={
+                product.taxRate
+                  ? `${product.taxRate.name} (${product.taxRate.rate}%)`
+                  : 'Company default'
+              }
             />
             <Row label="Description" value={product.description} />
             <Row label="Created" value={formatDateTime(product.createdAt)} />
@@ -161,6 +173,8 @@ export default function ProductDetailPage() {
         </Card>
 
         <div className="space-y-6 lg:col-span-2">
+          <PackUnitsCard product={product} canWrite={canWrite} onSaved={setProduct} />
+
           {/* Stock by warehouse */}
           <Card title="Stock by warehouse">
             {product.stockByWarehouse.length === 0 ? (
@@ -214,7 +228,9 @@ export default function ProductDetailPage() {
                           </td>
                           <td className="py-2 pr-3">{m.type.replaceAll('_', ' ').toLowerCase()}</td>
                           <td className="py-2 pr-3 font-mono text-xs">{m.warehouse.code}</td>
-                          <td className="py-2 pr-3 text-slate-600">{m.reference ?? m.reason ?? '—'}</td>
+                          <td className="py-2 pr-3 text-slate-600">
+                            {m.reference ?? m.reason ?? '—'}
+                          </td>
                           <td
                             className={clsx(
                               'py-2 text-right tabular-nums',
@@ -225,7 +241,9 @@ export default function ProductDetailPage() {
                             {formatQty(m.quantity)}
                           </td>
                           {product.averageCost !== undefined && (
-                            <td className="py-2 pl-3 text-right tabular-nums">{formatMoney(m.unitCost)}</td>
+                            <td className="py-2 pl-3 text-right tabular-nums">
+                              {formatMoney(m.unitCost)}
+                            </td>
                           )}
                         </tr>
                       ))}
@@ -245,7 +263,12 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: str
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <p className="text-sm text-slate-500">{label}</p>
-      <p className={clsx('mt-1 text-xl font-semibold tabular-nums', warn ? 'text-amber-600' : 'text-slate-900')}>
+      <p
+        className={clsx(
+          'mt-1 text-xl font-semibold tabular-nums',
+          warn ? 'text-amber-600' : 'text-slate-900',
+        )}
+      >
         {value}
       </p>
       {warn && (

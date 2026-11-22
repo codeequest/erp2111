@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -14,6 +15,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
 import { RequestUser } from '../../common/types/request-user';
+import { SetPackUnitsDto } from './dto/catalog.dto';
 import { CreateProductDto, ListProductsQueryDto, UpdateProductDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
 
@@ -36,6 +38,13 @@ export class ProductsController {
   @ApiOperation({ summary: 'Categories, units and tax rates for the product form' })
   lookups() {
     return this.productsService.lookups();
+  }
+
+  @Get('barcode/:code')
+  @RequirePermissions('inventory.product.read')
+  @ApiOperation({ summary: 'Find the product (or pack size) a barcode belongs to' })
+  findByBarcode(@Param('code') code: string, @CurrentUser() user: RequestUser) {
+    return this.productsService.findByBarcode(code, user);
   }
 
   @Get(':id')
@@ -63,6 +72,17 @@ export class ProductsController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.productsService.update(id, dto, user);
+  }
+
+  @Put(':id/units')
+  @RequirePermissions('inventory.product.write')
+  @ApiOperation({ summary: 'Replace the pack sizes of a product (e.g. 1 CTN = 24 PCS)' })
+  setPackUnits(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetPackUnitsDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.productsService.setPackUnits(id, dto, user);
   }
 
   @Post(':id/deactivate')

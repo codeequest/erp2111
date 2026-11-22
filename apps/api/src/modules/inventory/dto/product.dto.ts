@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -103,6 +104,12 @@ export class ListProductsQueryDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Only active products below their minimum stock' })
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsOptional()
+  @IsBoolean()
+  lowStock?: boolean;
 
   @ApiPropertyOptional({ enum: PRODUCT_STATUS_FILTERS, default: 'active' })
   @IsOptional()

@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
+  Settings2,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -15,13 +17,14 @@ import {
   Search,
 } from 'lucide-react';
 import type {
+  BarcodeMatch,
   Paginated,
   ProductListItem,
   ProductLookups,
   ProductSortField,
   ProductStatusFilter,
 } from '@erp/shared';
-import { api } from '@/lib/api';
+import { ApiRequestError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatMoney, formatQty } from '@/lib/format';
 import {
@@ -29,6 +32,7 @@ import {
   ErrorBox,
   StatusBadge,
   btnPrimary,
+  btnSecondary,
   fieldClass,
   inputClass,
 } from '@/components/products/ui';
@@ -48,11 +52,18 @@ export default function ProductsPage() {
   const [sort, setSort] = useState<ProductSortField>('name');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
+  const [lowStock, setLowStock] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [data, setData] = useState<Paginated<ProductListItem> | null>(null);
   const [lookups, setLookups] = useState<ProductLookups | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // The dashboard links here with ?lowStock=1.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('lowStock') === '1') setLowStock(true);
+  }, []);
 
   // Debounce typing so we don't query on every keystroke.
   useEffect(() => {
@@ -80,6 +91,7 @@ export default function ProductsPage() {
     });
     if (search) params.set('search', search);
     if (categoryId) params.set('categoryId', categoryId);
+    if (lowStock) params.set('lowStock', 'true');
 
     setLoading(true);
     api<Paginated<ProductListItem>>(`/inventory/products?${params}`)
@@ -93,7 +105,24 @@ export default function ProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [search, categoryId, status, sort, order, page]);
+  }, [search, categoryId, status, sort, order, page, lowStock]);
+
+  /** Enter in the search box: if it is a barcode, open that product directly. */
+  async function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    const code = searchInput.trim();
+    setNotice(null);
+    if (!/^[0-9A-Za-z-]{4,64}$/.test(code)) return;
+    try {
+      const match = await api<BarcodeMatch>(
+        `/inventory/products/barcode/${encodeURIComponent(code)}`,
+      );
+      router.push(`/inventory/products/${match.product.id}`);
+    } catch (err) {
+      if (!(err instanceof ApiRequestError && err.status === 404))
+        setNotice((err as Error).message);
+    }
+  }
 
   function toggleSort(field: ProductSortField) {
     if (sort === field) setOrder(order === 'asc' ? 'desc' : 'asc');
@@ -105,7 +134,7 @@ export default function ProductsPage() {
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
-  const filtered = Boolean(search || categoryId || status !== 'active');
+  const filtered = Boolean(search || categoryId || status !== 'active' || lowStock);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -123,11 +152,16 @@ export default function ProductsPage() {
               </p>
             </div>
           </div>
-          {canWrite && (
-            <Link href="/inventory/products/new" className={btnPrimary}>
-              <Plus className="size-4" /> New product
+          <div className="flex flex-wrap gap-2">
+            <Link href="/inventory/products/setup" className={btnSecondary}>
+              <Settings2 className="size-4" /> Catalogue setup
             </Link>
-          )}
+            {canWrite && (
+              <Link href="/inventory/products/new" className={btnPrimary}>
+                <Plus className="size-4" /> New product
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -139,7 +173,8 @@ export default function ProductsPage() {
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search name, SKU or barcode…"
+              onKeyDown={onSearchKey}
+              placeholder="Search, or scan a barcode and press Enter…"
               aria-label="Search products"
               className={clsx(inputClass, 'py-1.5 pl-9')}
             />
@@ -156,6 +191,7 @@ export default function ProductsPage() {
             <option value="">All categories</option>
             {lookups?.categories.map((c) => (
               <option key={c.id} value={c.id}>
+                {'  '.repeat(c.depth)}
                 {c.name}
               </option>
             ))}
@@ -177,9 +213,29 @@ export default function ProductsPage() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => {
+              setLowStock(!lowStock);
+              setPage(1);
+            }}
+            aria-pressed={lowStock}
+            className={clsx(
+              'inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition',
+              lowStock
+                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+            )}
+          >
+            <AlertTriangle className="size-4" /> Low stock
+          </button>
           {loading && <Loader2 className="size-4 animate-spin text-slate-400" />}
         </div>
 
+        {notice && (
+          <div className="p-3">
+            <ErrorBox message={notice} />
+          </div>
+        )}
         {error && (
           <div className="p-3">
             <ErrorBox message={error} />
@@ -230,7 +286,9 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">{p.category?.name ?? '—'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{p.baseUnit.code}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(p.salePrice)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      {formatMoney(p.salePrice)}
+                    </td>
                     {canSeeCost && (
                       <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">
                         {formatMoney(p.averageCost)}
