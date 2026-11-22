@@ -99,7 +99,10 @@ export class ProductsService {
 
   /** The list filters as a Prisma where clause (also used by the CSV export). */
   async buildWhere(
-    query: Pick<ListProductsQueryDto, 'status' | 'categoryId' | 'lowStock' | 'search'>,
+    query: Pick<
+      ListProductsQueryDto,
+      'status' | 'categoryId' | 'lowStock' | 'search' | 'barcode' | 'barcodes'
+    >,
   ): Promise<Prisma.ProductWhereInput> {
     const where: Prisma.ProductWhereInput = {};
     const and: Prisma.ProductWhereInput[] = [];
@@ -110,6 +113,12 @@ export class ProductsService {
     }
     if (query.lowStock) {
       and.push({ id: { in: (await this.lowStockRows()).map((r) => r.id) } });
+    }
+    if (query.barcode === 'with') and.push({ barcode: { not: null } });
+    if (query.barcode === 'without') and.push({ barcode: null });
+    if (query.barcodes) {
+      const codes = query.barcodes.split(/[\s,;]+/).filter(Boolean);
+      and.push({ barcode: { in: codes } });
     }
     if (and.length) where.AND = and;
     if (query.search) {

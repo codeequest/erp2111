@@ -111,6 +111,24 @@ export class ListProductsQueryDto {
   @IsBoolean()
   lowStock?: boolean;
 
+  @ApiPropertyOptional({
+    enum: ['with', 'without'],
+    description: 'Only products that have (with) or have no (without) barcode',
+  })
+  @Transform(trimToNull)
+  @IsOptional()
+  @IsIn(['with', 'without'])
+  barcode?: 'with' | 'without' | null;
+
+  @ApiPropertyOptional({
+    description: 'Only these barcodes (separated by commas, semicolons, spaces or new lines)',
+  })
+  @Transform(trimToNull)
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  barcodes?: string | null;
+
   @ApiPropertyOptional({ enum: PRODUCT_STATUS_FILTERS, default: 'active' })
   @IsOptional()
   @IsIn(PRODUCT_STATUS_FILTERS)
