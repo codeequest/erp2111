@@ -47,7 +47,10 @@ export function refreshSession(): Promise<AuthResponse | null> {
 
 export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData sets its own multipart Content-Type (with the boundary).
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });
@@ -64,4 +67,30 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/**
+ * Downloads a file from the API (with the access token) and saves it in the browser.
+ * Plain links cannot be used because the token is never stored in a cookie.
+ */
+export async function apiDownload(path: string, fallbackName: string, retry = true): Promise<void> {
+  const headers = new Headers();
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const res = await fetch(`${BASE}${path}`, { headers, credentials: 'include' });
+  if (res.status === 401 && retry) {
+    if (await refreshSession()) return apiDownload(path, fallbackName, false);
+    onSessionExpired?.();
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => undefined)) as ApiError | undefined;
+    throw new ApiRequestError(res.status, body);
+  }
+  const name =
+    /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

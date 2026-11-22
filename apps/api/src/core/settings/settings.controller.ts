@@ -1,8 +1,11 @@
-import { Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Param, ParseUUIDPipe } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { notImplemented } from '../../common/not-implemented';
 import { SettingsService } from './settings.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequestUser } from '../../common/types/request-user';
+import { CreateTaxRateDto, UpdateTaxRateDto } from './dto/tax-rate.dto';
 
 /**
  * SKELETON — every endpoint answers 501 Not Implemented.
@@ -32,21 +35,25 @@ export class SettingsController {
   @RequirePermissions('admin.settings.manage')
   @ApiOperation({ summary: 'List tax rates' })
   getTaxRates() {
-    return notImplemented('Admin · Settings: List tax rates');
+    return this.settingsService.listTaxRates();
   }
 
   @Post('tax-rates')
   @RequirePermissions('admin.settings.manage')
   @ApiOperation({ summary: 'Create a tax rate' })
-  taxRates() {
-    return notImplemented('Admin · Settings: Create a tax rate');
+  createTaxRate(@Body() dto: CreateTaxRateDto, @CurrentUser() user: RequestUser) {
+    return this.settingsService.createTaxRate(dto, user);
   }
 
   @Patch('tax-rates/:id')
   @RequirePermissions('admin.settings.manage')
   @ApiOperation({ summary: 'Update a tax rate' })
-  updateTaxRates(@Param('id', ParseUUIDPipe) id: string) {
-    return notImplemented('Admin · Settings: Update a tax rate');
+  updateTaxRate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTaxRateDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.settingsService.updateTaxRate(id, dto, user);
   }
 
   @Get('sequences')
