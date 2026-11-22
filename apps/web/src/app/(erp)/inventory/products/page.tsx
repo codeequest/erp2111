@@ -10,9 +10,12 @@ import {
   ArrowUp,
   Settings2,
   Tags,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
+  FileSpreadsheet,
+  FileText,
   ImageIcon,
   Loader2,
   Package,
@@ -63,6 +66,7 @@ export default function ProductsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportMenu, setExportMenu] = useState(false);
 
   const [data, setData] = useState<Paginated<ProductListItem> | null>(null);
   const [lookups, setLookups] = useState<ProductLookups | null>(null);
@@ -120,11 +124,18 @@ export default function ProductsPage() {
     };
   }, [search, categoryId, status, sort, order, page, lowStock, reloadKey]);
 
-  async function exportCsv() {
+  async function exportProducts(format: 'xlsx' | 'csv') {
+    setExportMenu(false);
     setExporting(true);
     setNotice(null);
     try {
-      await apiDownload(`/inventory/products/export?${filterParams()}`, 'products.csv');
+      const params = filterParams();
+      params.set('format', format);
+      // What is typed now, even if the list's search debounce has not fired yet.
+      const term = searchInput.trim();
+      if (term) params.set('search', term);
+      else params.delete('search');
+      await apiDownload(`/inventory/products/export?${params}`, `products.${format}`);
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -187,14 +198,49 @@ export default function ProductsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={exportCsv} disabled={exporting} className={btnSecondary}>
-              {exporting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Download className="size-4" />
+            <div
+              className="relative"
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) setExportMenu(false);
+              }}
+            >
+              <button
+                onClick={() => setExportMenu((o) => !o)}
+                disabled={exporting}
+                aria-haspopup="menu"
+                aria-expanded={exportMenu}
+                className={btnSecondary}
+              >
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                Export
+                <ChevronDown className="size-3.5 text-slate-400" />
+              </button>
+              {exportMenu && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => void exportProducts('xlsx')}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    <FileSpreadsheet className="size-4 text-emerald-600" /> Excel (.xlsx)
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => void exportProducts('csv')}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    <FileText className="size-4 text-slate-500" /> CSV (.csv)
+                  </button>
+                </div>
               )}
-              Export
-            </button>
+            </div>
             {canWrite && (
               <Link href="/inventory/products/import" className={btnSecondary}>
                 <Upload className="size-4" /> Import

@@ -3,9 +3,9 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { CheckCircle2, Download, FileUp, Loader2, Upload } from 'lucide-react';
+import { CheckCircle2, Download, FileSpreadsheet, FileUp, Loader2, Upload } from 'lucide-react';
 import { PRODUCT_CSV_COLUMNS, type ImportReport, type ImportRowAction } from '@erp/shared';
-import { api } from '@/lib/api';
+import { api, apiDownload } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { Breadcrumbs, ErrorBox, btnPrimary, btnSecondary } from '@/components/products/ui';
 
@@ -71,6 +71,15 @@ export default function ImportProductsPage() {
     void send(f, true);
   }
 
+  async function downloadExcelTemplate() {
+    setError(null);
+    try {
+      await apiDownload('/inventory/products/import-template', 'products-template.xlsx');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   function downloadTemplate() {
     const url = URL.createObjectURL(new Blob(['﻿' + TEMPLATE], { type: 'text/csv' }));
     const a = document.createElement('a');
@@ -99,7 +108,7 @@ export default function ImportProductsPage() {
         />
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">Import products</h1>
         <p className="text-sm text-slate-500">
-          Create or update many products at once from a CSV file (Excel: File › Save as › CSV).
+          Create or update many products at once from an Excel (.xlsx) or CSV file.
         </p>
       </div>
 
@@ -119,13 +128,13 @@ export default function ImportProductsPage() {
               <span className="font-medium">{file.name}</span> ({Math.ceil(file.size / 1024)} KB)
             </>
           ) : (
-            'Drop a CSV file here, or'
+            'Drop an Excel (.xlsx) or CSV file here, or'
           )}
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="hidden"
           onChange={(e) => {
             choose(e.target.files?.[0]);
@@ -136,8 +145,11 @@ export default function ImportProductsPage() {
           <button onClick={() => inputRef.current?.click()} className={btnPrimary}>
             <Upload className="size-4" /> {file ? 'Choose another file' : 'Choose a file'}
           </button>
+          <button onClick={() => void downloadExcelTemplate()} className={btnSecondary}>
+            <FileSpreadsheet className="size-4" /> Excel template
+          </button>
           <button onClick={downloadTemplate} className={btnSecondary}>
-            <Download className="size-4" /> Download template
+            <Download className="size-4" /> CSV template
           </button>
         </div>
       </div>
@@ -165,7 +177,11 @@ export default function ImportProductsPage() {
             <code className="text-xs">Food &gt; Oils</code>), and must already exist.
           </li>
           <li>
-            Files saved by Excel with <code className="text-xs">;</code> separators and decimal
+            Excel: the &quot;Products&quot; sheet (or the first sheet) is read. A file from Products
+            › Export › Excel can be edited and imported back as-is.
+          </li>
+          <li>
+            CSV files saved by Excel with <code className="text-xs">;</code> separators and decimal
             commas (12,50) are understood.
           </li>
           <li>Nothing is saved until you confirm. Rows with errors are skipped.</li>
