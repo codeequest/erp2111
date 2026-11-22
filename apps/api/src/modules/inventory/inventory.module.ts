@@ -8,6 +8,7 @@ import { InventoryService } from './inventory.service';
 import { ProductsService } from './products.service';
 import { CatalogService } from './catalog.service';
 import { StockService } from './stock.service';
+import { AdjustmentsService } from './adjustments.service';
 
 @Module({
   controllers: [
@@ -17,7 +18,7 @@ import { StockService } from './stock.service';
     WarehousesController,
     StockController,
   ],
-  providers: [InventoryService, ProductsService, CatalogService, StockService],
-  exports: [InventoryService, ProductsService, CatalogService, StockService],
+  providers: [InventoryService, ProductsService, CatalogService, StockService, AdjustmentsService],
+  exports: [InventoryService, ProductsService, CatalogService, StockService, AdjustmentsService],
 })
 export class InventoryModule {}

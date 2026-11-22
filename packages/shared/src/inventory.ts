@@ -145,3 +145,61 @@ export interface StockMoveRow {
   warehouse: { id: string; code: string; name: string };
   createdBy: { id: string; fullName: string };
 }
+
+// ── Stock adjustments ─────────────────────────────────────────────────────────
+
+/**
+ * count  each line gives the quantity counted on the shelf; the difference is posted
+ * delta  each line gives the quantity to add (+) or remove (-)
+ */
+export type AdjustmentMode = 'count' | 'delta';
+
+export const ADJUSTMENT_REASONS = [
+  'Inventory count',
+  'Damaged',
+  'Expired',
+  'Lost or stolen',
+  'Found',
+  'Data entry correction',
+  'Other',
+] as const;
+
+export interface StockAdjustmentInput {
+  warehouseId: string;
+  mode: AdjustmentMode;
+  reason: string;
+  lines: { productId: string; quantity: number }[];
+}
+
+export interface StockAdjustmentResult {
+  id: string;
+  /** e.g. "ADJ-2026-00001" */
+  reference: string;
+  createdAt: string;
+  warehouse: { id: string; code: string; name: string };
+  reason: string;
+  lines: {
+    product: { id: string; sku: string; name: string; baseUnit: { code: string } };
+    before: string;
+    /** Signed change actually posted. */
+    change: string;
+    after: string;
+  }[];
+  /** Products whose counted quantity already matched: nothing was posted for them. */
+  unchanged: number;
+}
+
+export interface StockAdjustmentListItem {
+  id: string;
+  reference: string;
+  createdAt: string;
+  warehouse: { id: string; code: string; name: string };
+  reason: string;
+  createdBy: { id: string; fullName: string };
+  lines: {
+    product: { id: string; sku: string; name: string; baseUnit: { code: string } };
+    change: string;
+  }[];
+  /** Σ change × unit cost — only with `inventory.cost.view`. Negative = stock value lost. */
+  valueChange?: string;
+}
