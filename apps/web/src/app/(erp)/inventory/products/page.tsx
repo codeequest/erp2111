@@ -9,6 +9,7 @@ import {
   ArrowDown,
   ArrowUp,
   Settings2,
+  Tags,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -199,6 +200,9 @@ export default function ProductsPage() {
                 <Upload className="size-4" /> Import
               </Link>
             )}
+            <Link href="/inventory/products/price-lists" className={btnSecondary}>
+              <Tags className="size-4" /> Price lists
+            </Link>
             <Link href="/inventory/products/setup" className={btnSecondary}>
               <Settings2 className="size-4" /> Catalogue setup
             </Link>

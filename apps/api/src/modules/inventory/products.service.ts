@@ -313,6 +313,13 @@ export class ProductsService {
 
     await this.runWrite(async (tx) => {
       await tx.productUnit.deleteMany({ where: { productId: id } });
+      // Fixed prices of pack sizes that were removed go with them.
+      await tx.priceListItem.deleteMany({
+        where: {
+          productId: id,
+          unitId: { notIn: [product.baseUnitId, ...dto.units.map((u) => u.unitId)] },
+        },
+      });
       if (dto.units.length) {
         await tx.productUnit.createMany({
           data: dto.units.map((u) => ({

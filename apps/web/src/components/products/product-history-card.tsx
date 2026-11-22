@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   'bulk setCategory': 'Bulk category change',
   'bulk activate': 'Bulk activation',
   'bulk deactivate': 'Bulk deactivation',
+  'price list': 'Price list change',
 };
 
 const INITIAL = 8;

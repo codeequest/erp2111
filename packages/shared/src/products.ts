@@ -248,3 +248,63 @@ export interface BulkProductResult {
   /** Selected products already in the requested state */
   skipped: number;
 }
+
+// ── Price lists and labels ──────────────────────────────────────────────────
+
+export interface PriceListRow {
+  id: string;
+  name: string;
+  description: string | null;
+  /** Applied to the sale price when a product has no fixed price, e.g. "-10.00" */
+  adjustPercent: string;
+  isActive: boolean;
+  /** Number of fixed prices in the list */
+  itemCount: number;
+}
+
+export interface PriceListInput {
+  name: string;
+  description?: string | null;
+  adjustPercent: string;
+  isActive?: boolean;
+}
+
+/** One selling unit of a product inside a price list. */
+export interface PriceLine {
+  unit: UnitRef;
+  /** Base units in this unit ("1" for the base unit) */
+  factor: string;
+  /** Normal price for this unit: sale price x factor */
+  standardPrice: string;
+  /** The price this list charges (fixed, or computed from the list's percentage) */
+  price: string;
+  /** true when the list has its own price for this unit */
+  fixed: boolean;
+}
+
+export interface PriceListProductRow {
+  product: { id: string; sku: string; name: string; imageUrl: string | null };
+  lines: PriceLine[];
+}
+
+/** PUT /inventory/price-lists/:id/products/:productId. A null price removes the fixed price. */
+export interface SetProductPricesInput {
+  prices: Array<{ unitId: string; price: string | null }>;
+}
+
+/** Prices of one product in every active price list (product page). */
+export interface ProductListPrices {
+  priceList: { id: string; name: string; adjustPercent: string };
+  lines: PriceLine[];
+}
+
+export interface ProductLabel {
+  id: string;
+  sku: string;
+  name: string;
+  /** The product barcode, or null (the label then encodes the SKU) */
+  barcode: string | null;
+  unitCode: string;
+  /** Sale price, or the chosen price list's price */
+  price: string;
+}

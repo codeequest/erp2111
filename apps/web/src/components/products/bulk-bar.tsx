@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Printer, X } from 'lucide-react';
 import type {
   BulkProductAction,
   BulkProductRequest,
@@ -126,6 +127,12 @@ export function BulkBar({
           <button onClick={() => run('deactivate')} disabled={busy} className={pill}>
             Deactivate
           </button>
+          <Link
+            href={`/inventory/products/labels?ids=${ids.join(',')}`}
+            className={clsx(pill, 'inline-flex items-center gap-1.5')}
+          >
+            <Printer className="size-4" /> Print labels
+          </Link>
         </>
       )}
 

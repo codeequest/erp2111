@@ -19,6 +19,7 @@ import {
 import { PackUnitsCard } from '@/components/products/pack-units-card';
 import { ProductImageCard } from '@/components/products/product-image-card';
 import { ProductHistoryCard } from '@/components/products/product-history-card';
+import { ProductPricesCard } from '@/components/products/product-prices-card';
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -183,6 +184,10 @@ export default function ProductDetailPage() {
 
         <div className="space-y-6 lg:col-span-2">
           <PackUnitsCard product={product} canWrite={canWrite} onSaved={setProduct} />
+          <ProductPricesCard
+            productId={product.id}
+            version={`${product.updatedAt}|${JSON.stringify(product.packUnits)}`}
+          />
 
           {/* Stock by warehouse */}
           <Card title="Stock by warehouse">

@@ -11,11 +11,14 @@ import { ProductBulkService } from './product-bulk.service';
 import { ProductHistoryService } from './product-history.service';
 import { ProductTransferService } from './product-transfer.service';
 import { ProductImagesController } from './product-images.controller';
+import { PriceListsController } from './price-lists.controller';
+import { PriceListsService } from './price-lists.service';
 
 @Module({
   controllers: [
     ProductsController,
     ProductImagesController,
+    PriceListsController,
     CategoriesController,
     UnitsController,
     WarehousesController,
@@ -28,6 +31,7 @@ import { ProductImagesController } from './product-images.controller';
     ProductBulkService,
     ProductHistoryService,
     ProductTransferService,
+    PriceListsService,
   ],
   exports: [InventoryService, ProductsService, CatalogService],
 })

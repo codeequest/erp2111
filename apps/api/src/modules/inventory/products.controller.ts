@@ -27,6 +27,8 @@ import { BulkProductDto, ImportQueryDto } from './dto/phase3.dto';
 import { MAX_IMAGE_BYTES, ProductBulkService, UploadedFileData } from './product-bulk.service';
 import { ProductHistoryService } from './product-history.service';
 import { ProductTransferService } from './product-transfer.service';
+import { PriceListsService } from './price-lists.service';
+import { LabelsQueryDto } from './dto/price-list.dto';
 
 const CSV_LIMIT_BYTES = 10 * 1024 * 1024;
 
@@ -43,6 +45,7 @@ export class ProductsController {
     private readonly bulkService: ProductBulkService,
     private readonly historyService: ProductHistoryService,
     private readonly transferService: ProductTransferService,
+    private readonly priceListsService: PriceListsService,
   ) {}
 
   @Get()
@@ -77,6 +80,13 @@ export class ProductsController {
     return this.bulkService.bulk(dto, user);
   }
 
+  @Get('labels')
+  @RequirePermissions('inventory.product.read')
+  @ApiOperation({ summary: 'Data for printing shelf labels (optionally with a price list)' })
+  labels(@Query() query: LabelsQueryDto) {
+    return this.priceListsService.labels(query);
+  }
+
   @Get('barcode/:code')
   @RequirePermissions('inventory.product.read')
   @ApiOperation({ summary: 'Find the product (or pack size) a barcode belongs to' })
@@ -109,6 +119,13 @@ export class ProductsController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.productsService.update(id, dto, user);
+  }
+
+  @Get(':id/prices')
+  @RequirePermissions('inventory.product.read')
+  @ApiOperation({ summary: 'Prices of the product in every active price list' })
+  prices(@Param('id', ParseUUIDPipe) id: string) {
+    return this.priceListsService.pricesForProduct(id);
   }
 
   @Get(':id/history')
