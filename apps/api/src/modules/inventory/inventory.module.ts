@@ -7,6 +7,7 @@ import { StockController } from './stock.controller';
 import { AuditModule } from '../../core/audit/audit.module';
 import { InventoryService } from './inventory.service';
 import { ProductsImportService } from './products-import.service';
+import { ProductsLabelsService } from './products-labels.service';
 
 @Module({
   imports: [AuditModule],
@@ -17,7 +18,7 @@ import { ProductsImportService } from './products-import.service';
     WarehousesController,
     StockController,
   ],
-  providers: [InventoryService, ProductsImportService],
+  providers: [InventoryService, ProductsImportService, ProductsLabelsService],
   exports: [InventoryService],
 })
 export class InventoryModule {}

@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { ChevronRight, Download, FileSpreadsheet, ImagePlus, Lock, Pencil, Plus, Power, Search, Upload, X, Zap } from 'lucide-react';
+import { Barcode, ChevronRight, Download, FileSpreadsheet, ImagePlus, Lock, Pencil, Plus, Power, ScanLine, Search, Upload, X, Zap } from 'lucide-react';
 import { api, ApiRequestError, getAccessToken } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { MODULE_COLORS } from '@/components/icons';
+import { BarcodeScanner } from '@/components/barcode-scanner';
 
 interface Unit {
   id: string;
@@ -95,18 +96,27 @@ const money = (v: string, cur: 'USD' | 'TND') =>
     maximumFractionDigits: cur === 'TND' ? 3 : 2,
   }).format(Number(v));
 
-async function downloadFile(path: string, filename: string) {
+async function downloadFile(
+  path: string,
+  filename: string,
+  type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+) {
   const res = await fetch(`/api/v1${path}`, {
     headers: { Authorization: `Bearer ${getAccessToken() ?? ''}` },
     credentials: 'include',
   });
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
-  const url = URL.createObjectURL(await res.blob());
+  // force the file type so the browser keeps the right extension
+  const blob = new Blob([await res.arrayBuffer()], { type });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a); // must be in the DOM for the filename to be honoured
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // revoke later: revoking immediately makes Chrome fall back to a random file name
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** Same default as the API (USD_TND_RATE); only used to pre-fill the form. */
@@ -132,6 +142,9 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState<string | null>(null); // last scanned code
+  const [newBarcode, setNewBarcode] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,6 +232,19 @@ export default function ProductsPage() {
                 <Download className="size-4" /> Export Excel
               </button>
               <button
+                onClick={() =>
+                  downloadFile(
+                    `/inventory/products/export/labels${categoryFilter ? `?categoryId=${categoryFilter}` : ''}`,
+                    'barcode-labels.pdf',
+                    'application/pdf',
+                  ).catch((e) => setError(e instanceof Error ? e.message : 'Export failed'))
+                }
+                title="Printable PDF of barcode labels (uses the selected category)"
+                className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+              >
+                <Barcode className="size-4" /> Barcode labels (PDF)
+              </button>
+              <button
                 onClick={() => setImporting(true)}
                 className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
               >
@@ -246,12 +272,19 @@ export default function ProductsPage() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
+                setScanned(null);
                 setPage(1);
               }}
               placeholder="Search name, SKU, brand, model, category…"
               className={clsx(input, 'pl-9')}
             />
           </div>
+          <button
+            onClick={() => setScanning(true)}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
+          >
+            <ScanLine className="size-4" /> Scan
+          </button>
           <select
             value={categoryFilter}
             onChange={(e) => {
@@ -294,6 +327,26 @@ export default function ProductsPage() {
         </div>
 
         {error && <p className="m-3 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+        {scanned && data && !loading && (
+          <div className="m-3 flex flex-wrap items-center justify-between gap-3 rounded-md bg-blue-50 p-3 text-sm text-blue-900">
+            <span>
+              Scanned <b className="font-mono">{scanned}</b> —{' '}
+              {data.total === 0 ? 'no product found.' : `${data.total} product(s) found.`}
+            </span>
+            {data.total === 0 && canWrite && (
+              <button
+                onClick={() => {
+                  setNewBarcode(scanned);
+                  setEditing('new');
+                }}
+                className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white"
+              >
+                Create a product with this barcode
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -426,6 +479,21 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {scanning && (
+        <BarcodeScanner
+          onClose={() => setScanning(false)}
+          onDetected={(code) => {
+            setScanning(false);
+            setScanned(code);
+            setActive('all');
+            setCondition('');
+            setCategoryFilter('');
+            setSearch(code);
+            setPage(1);
+          }}
+        />
+      )}
+
       {importing && (
         <ImportDialog
           onClose={() => setImporting(false)}
@@ -438,11 +506,16 @@ export default function ProductsPage() {
       {editing && (
         <ProductDialog
           product={editing === 'new' ? null : editing}
+          initialBarcode={editing === 'new' ? newBarcode : ''}
           units={units}
           categories={categories}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            setNewBarcode('');
+          }}
           onSaved={() => {
             setEditing(null);
+            setNewBarcode('');
             void load();
           }}
         />
@@ -453,12 +526,14 @@ export default function ProductsPage() {
 
 function ProductDialog({
   product,
+  initialBarcode,
   units,
   categories,
   onClose,
   onSaved,
 }: {
   product: Product | null;
+  initialBarcode: string;
   units: Unit[];
   categories: Category[];
   onClose: () => void;
@@ -485,9 +560,10 @@ function ProductDialog({
           barcode: product.barcode ?? '',
           description: product.description ?? '',
         }
-      : { ...EMPTY, baseUnitId: units[0]?.id ?? '' },
+      : { ...EMPTY, baseUnitId: units[0]?.id ?? '', barcode: initialBarcode },
   );
   const [saving, setSaving] = useState(false);
+  const [scanBarcode, setScanBarcode] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((s) => ({ ...s, [k]: v }));
@@ -692,7 +768,26 @@ function ProductDialog({
           </div>
           <div>
             <label className={label}>Barcode</label>
-            <input value={f.barcode} onChange={(e) => set('barcode', e.target.value)} className={input} />
+            <div className="flex gap-2">
+              <input value={f.barcode} onChange={(e) => set('barcode', e.target.value)} className={input} />
+              <button
+                type="button"
+                onClick={() => setScanBarcode(true)}
+                title="Scan the barcode"
+                className="rounded-md border border-slate-300 px-2.5 text-slate-600 hover:bg-slate-50"
+              >
+                <ScanLine className="size-4" />
+              </button>
+            </div>
+            {scanBarcode && (
+              <BarcodeScanner
+                onClose={() => setScanBarcode(false)}
+                onDetected={(code) => {
+                  set('barcode', code);
+                  setScanBarcode(false);
+                }}
+              />
+            )}
           </div>
           <div>
             <label className={label}>Unit *</label>

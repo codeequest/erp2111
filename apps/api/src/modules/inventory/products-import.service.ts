@@ -64,14 +64,64 @@ export class ProductsImportService {
   ) {}
 
   async template(): Promise<Buffer> {
+    const categories = await this.prisma.category.findMany({ orderBy: { name: 'asc' } });
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Products');
-    ws.addRow(TEMPLATE_COLUMNS).font = { bold: true };
-    ws.addRow([
-      'SYM-JET14', 'SYM Jet 14', 'SYM', 'Jet 14', 125, 'no', 'Noir', 2025, 'NEW',
-      2000, '', 2, '', 'Scooters', 'PCS', '/scooters/sym-jet-14.jpg', 'Exemple — laissez un prix vide pour le calculer avec le taux de change',
-    ]);
-    ws.columns.forEach((c) => (c.width = 16));
+
+    // --- sheet 1: the data to fill in ---
+    const ws = wb.addWorksheet('Products', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const head = ws.addRow(TEMPLATE_COLUMNS);
+    head.height = 22;
+    head.eachCell((c, i) => {
+      const required = i <= 2; // sku + name
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: required ? 'FFC2410C' : 'FF047857' } };
+      c.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+    const examples = [
+      ['EX-SCOOTER-125', 'Exemple Scooter 125', 'Marque', 'Modele', 125, 'no', 'Rouge', 2025, 'NEW', 2000, '', 2, '', categories[0]?.name ?? 'Scooters', 'PCS', '', 'Laissez un prix vide : il est calculé avec le taux de change (1 USD = 3,1 TND)'],
+      ['EX-ELECTRIC', 'Exemple Électrique', 'Marque', 'Modele', '', 'yes', 'Gris', 2026, 'NEW', '', 15500, 1, '', categories[0]?.name ?? 'Scooters', 'PCS', '', 'Prix en TND seulement'],
+      ['EX-USED-50', 'Exemple Occasion 50cc', 'Marque', 'Modele', 50, 'no', 'Blanc', 2021, 'USED', 700, 2170, 0, '', categories[0]?.name ?? 'Scooters', 'PCS', '', ''],
+    ];
+    examples.forEach((r) => ws.addRow(r));
+    ws.columns.forEach((c, i) => (c.width = [18, 28, 14, 14, 12, 12, 14, 12, 12, 14, 14, 10, 16, 22, 8, 32, 50][i] ?? 16));
+    const idx = (k: string) => TEMPLATE_COLUMNS.indexOf(k) + 1;
+    const list = (k: string, values: string, prompt: string) => {
+      for (let r = 2; r <= 500; r++)
+        ws.getCell(r, idx(k)).dataValidation = {
+          type: 'list', allowBlank: true, formulae: [values], showErrorMessage: true,
+          errorTitle: 'Valeur invalide', error: prompt,
+        };
+    };
+    list('isElectric', '"yes,no"', 'Choisissez yes ou no');
+    list('condition', '"NEW,USED"', 'Choisissez NEW ou USED');
+    list('unit', '"PCS"', 'Unité inconnue');
+
+    // --- sheet 2: how to fill it ---
+    const help = wb.addWorksheet('Instructions');
+    help.columns = [{ width: 18 }, { width: 14 }, { width: 90 }];
+    help.addRow(['Colonne', 'Obligatoire', 'Explication']).font = { bold: true };
+    const doc: [string, string, string][] = [
+      ['sku', 'non*', 'Référence unique. Si elle existe déjà le produit est MIS À JOUR, sinon il est créé. *Si vide, elle est générée.'],
+      ['name', 'OUI', 'Nom du produit (peut aussi s\'appeler "Scooter").'],
+      ['brand / model', 'non', 'Marque et modèle.'],
+      ['engineCc', 'non', 'Cylindrée en cm³ (125, "125 cc"…). Laissez vide pour un électrique.'],
+      ['isElectric', 'non', 'yes ou no.'],
+      ['color / modelYear', 'non', 'Couleur et année du modèle.'],
+      ['condition', 'non', 'NEW (neuf) ou USED (occasion).'],
+      ['priceUsd / priceTnd', 'non', 'Prix en dollars et en dinars. Si un seul est rempli, l\'autre est calculé (1 USD = 3,1 TND). Formats acceptés : 2000, "62 475,000 TND", "20 153,23 $US".'],
+      ['minStock', 'non', 'Seuil d\'alerte de stock bas.'],
+      ['barcode', 'non', 'Code-barres (unique).'],
+      ['category', 'non', 'Nom de la catégorie. Une catégorie inexistante est créée automatiquement.'],
+      ['unit', 'non', 'Unité de mesure (PCS par défaut).'],
+      ['imageUrl', 'non', 'Chemin d\'une image déjà dans l\'application (ex. /scooters/honda-pcx-125.jpg). Pour une nouvelle photo, utilisez le formulaire du produit.'],
+      ['description', 'non', 'Texte libre.'],
+    ];
+    doc.forEach((r) => help.addRow(r));
+    help.addRow([]);
+    help.addRow(['', '', 'Supprimez les 3 lignes d\'exemple avant d\'importer, puis envoyez le fichier avec le bouton « Import Excel ».']).font = { bold: true };
+    help.addRow(['', '', 'Catégories existantes : ' + (categories.map((c) => c.name).join(' · ') || '—')]);
+    help.eachRow((r) => (r.alignment = { wrapText: true, vertical: 'top' }));
+
     return Buffer.from(await wb.xlsx.writeBuffer());
   }
 
@@ -81,19 +131,23 @@ export class ProductsImportService {
       include: { category: true, baseUnit: true },
       orderBy: [{ brand: 'asc' }, { name: 'asc' }],
     });
+    // One plain sheet, all products (active and inactive), nothing but data.
+    // The first 17 columns match the import template, so the file can be re-imported.
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Products');
-    ws.addRow(TEMPLATE_COLUMNS).font = { bold: true };
+    ws.addRow([...TEMPLATE_COLUMNS, 'isActive', 'createdAt']).font = { bold: true };
     for (const p of products) {
       ws.addRow([
         p.sku, p.name, p.brand ?? '', p.model ?? '', p.engineCc ?? '', p.isElectric ? 'yes' : 'no',
         p.color ?? '', p.modelYear ?? '', p.condition, Number(p.salePrice), Number(p.salePriceTnd),
         Number(p.minStock), p.barcode ?? '', p.category?.name ?? '', p.baseUnit.code,
-        p.imageUrl ?? '', p.description ?? '',
+        p.imageUrl ?? '', p.description ?? '', p.isActive ? 'yes' : 'no', p.createdAt,
       ]);
     }
-    ws.columns.forEach((c) => (c.width = 16));
+    ws.columns.forEach((c, i) => (c.width = [20, 28, 14, 14, 10, 10, 16, 10, 10, 12, 12, 10, 14, 24, 8, 34, 60, 10, 20][i] ?? 14));
+    ws.getColumn(19).numFmt = 'yyyy-mm-dd hh:mm';
     ws.views = [{ state: 'frozen', ySplit: 1 }];
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 19 } };
     return Buffer.from(await wb.xlsx.writeBuffer());
   }
 

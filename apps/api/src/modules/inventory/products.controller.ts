@@ -25,6 +25,7 @@ import { RequestUser } from '../../common/types/request-user';
 import { CreateProductDto, ListProductsQuery, UpdateProductDto } from './dto/product.dto';
 import { InventoryService } from './inventory.service';
 import { ProductsImportService } from './products-import.service';
+import { ProductsLabelsService } from './products-labels.service';
 
 export const UPLOAD_DIR = join(process.cwd(), 'uploads', 'products');
 mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -35,6 +36,7 @@ export class ProductsController {
   constructor(
     private readonly inventoryService: InventoryService,
     private readonly importService: ProductsImportService,
+    private readonly labelsService: ProductsLabelsService,
   ) {}
 
   @Get()
@@ -42,6 +44,17 @@ export class ProductsController {
   @ApiOperation({ summary: 'List / search products (scooters)' })
   findAll(@Query() q: ListProductsQuery, @CurrentUser() user: RequestUser) {
     return this.inventoryService.listProducts(q, user);
+  }
+
+  @Get('export/labels')
+  @RequirePermissions('inventory.product.read')
+  @ApiOperation({ summary: 'Printable PDF of barcode labels (optionally for one category)' })
+  async labels(@Query('categoryId') categoryId: string | undefined, @Res() res: Response) {
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'attachment; filename="barcode-labels.pdf"',
+    });
+    res.send(await this.labelsService.pdf({ categoryId: categoryId || undefined }));
   }
 
   // must stay above ':id' so "export" / "import" are not parsed as a UUID

@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@erp/shared": "workspace:*",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "clsx": "^2.1.1",
     "lucide-react": "0.577.0",
     "next": "15.5.29",
