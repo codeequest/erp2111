@@ -61,6 +61,8 @@ export default function ProductsPage() {
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [lowStock, setLowStock] = useState(false);
+  const [barcode, setBarcode] = useState<'' | 'with' | 'without'>('');
+  const [barcodes, setBarcodes] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reloadKey, setReloadKey] = useState(0);
@@ -99,6 +101,8 @@ export default function ProductsPage() {
     if (search) params.set('search', search);
     if (categoryId) params.set('categoryId', categoryId);
     if (lowStock) params.set('lowStock', 'true');
+    if (barcode) params.set('barcode', barcode);
+    if (barcodes.trim()) params.set('barcodes', barcodes.trim());
     return params;
   }
 
@@ -122,7 +126,7 @@ export default function ProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [search, categoryId, status, sort, order, page, lowStock, reloadKey]);
+  }, [search, categoryId, status, sort, order, page, lowStock, barcode, barcodes, reloadKey]);
 
   async function exportProducts(format: 'xlsx' | 'csv') {
     setExportMenu(false);
@@ -179,7 +183,7 @@ export default function ProductsPage() {
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
-  const filtered = Boolean(search || categoryId || status !== 'active' || lowStock);
+  const filtered = Boolean(search || categoryId || status !== 'active' || lowStock || barcode || barcodes);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -324,6 +328,29 @@ export default function ProductsPage() {
           >
             <AlertTriangle className="size-4" /> Low stock
           </button>
+          <select
+            value={barcode}
+            onChange={(e) => {
+              setBarcode(e.target.value as '' | 'with' | 'without');
+              setPage(1);
+            }}
+            aria-label="Filter by barcode"
+            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600"
+          >
+            <option value="">Barcode: all</option>
+            <option value="with">With barcode</option>
+            <option value="without">Without barcode</option>
+          </select>
+          <input
+            value={barcodes}
+            onChange={(e) => {
+              setBarcodes(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Barcodes (comma separated)"
+            aria-label="Filter by a list of barcodes"
+            className="w-56 rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+          />
           {loading && <Loader2 className="size-4 animate-spin text-slate-400" />}
         </div>
 
