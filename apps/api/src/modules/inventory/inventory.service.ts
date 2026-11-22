@@ -23,6 +23,19 @@ const PRODUCT_INCLUDE = {
   taxRate: { select: { id: true, name: true, rate: true } },
 } satisfies Prisma.ProductInclude;
 
+/** USD → TND rate used to fill the missing price (override with USD_TND_RATE). */
+export const usdTndRate = () => Number(process.env.USD_TND_RATE) || 3.1;
+
+/** If only one of the two prices is given, derive the other with the exchange rate. */
+export function completePrices<T extends { salePrice?: number; salePriceTnd?: number }>(dto: T): T {
+  const rate = usdTndRate();
+  const usd = dto.salePrice;
+  const tnd = dto.salePriceTnd;
+  if (usd && !tnd) return { ...dto, salePriceTnd: Math.round(usd * rate * 1000) / 1000 };
+  if (tnd && !usd) return { ...dto, salePrice: Math.round((tnd / rate) * 100) / 100 };
+  return dto;
+}
+
 @Injectable()
 export class InventoryService {
   constructor(
@@ -44,7 +57,17 @@ export class InventoryService {
     const pageSize = q.pageSize ?? 20;
     const where: Prisma.ProductWhereInput = {};
     if (q.active !== 'all') where.isActive = q.active !== 'false';
-    if (q.categoryId) where.categoryId = q.categoryId;
+    if (q.categoryId) {
+      // a parent category also matches the products of its sub-categories
+      const all = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+      const ids = new Set([q.categoryId]);
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const c of all)
+          if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) ids.add(c.id), (grew = true);
+      }
+      where.categoryId = { in: [...ids] };
+    }
     if (q.brand) where.brand = { equals: q.brand, mode: 'insensitive' };
     if (q.condition) where.condition = q.condition;
     if (q.search?.trim()) {
@@ -55,6 +78,7 @@ export class InventoryService {
         { barcode: { contains: s, mode: 'insensitive' } },
         { brand: { contains: s, mode: 'insensitive' } },
         { model: { contains: s, mode: 'insensitive' } },
+        { category: { name: { contains: s, mode: 'insensitive' } } },
       ];
     }
     const [total, items] = await this.prisma.$transaction([
@@ -84,7 +108,7 @@ export class InventoryService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.create({
-          data: { ...dto, barcode: dto.barcode || undefined },
+          data: { ...completePrices(dto), barcode: dto.barcode || undefined },
           include: PRODUCT_INCLUDE,
         });
         await this.audit.log(
@@ -106,7 +130,7 @@ export class InventoryService {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.update({
           where: { id },
-          data: { ...dto, barcode: dto.barcode === '' ? null : dto.barcode },
+          data: { ...completePrices(dto), barcode: dto.barcode === '' ? null : dto.barcode },
           include: PRODUCT_INCLUDE,
         });
         await this.audit.log(

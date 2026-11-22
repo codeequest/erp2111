@@ -265,7 +265,10 @@ model Product {
   /// Stock is always kept in the base unit
   baseUnitId  String   @map("base_unit_id") @db.Uuid
   taxRateId   String?  @map("tax_rate_id") @db.Uuid
+  /// Sale price in the base currency (USD)
   salePrice   Decimal  @default(0) @map("sale_price") @db.Decimal(18, 4)
+  /// Sale price in Tunisian dinar (TND)
+  salePriceTnd Decimal @default(0) @map("sale_price_tnd") @db.Decimal(18, 4)
   /// Weighted average cost in base unit — visible only with inventory.cost.view
   averageCost Decimal  @default(0) @map("average_cost") @db.Decimal(18, 4)
   /// Low-stock alert threshold (base unit)

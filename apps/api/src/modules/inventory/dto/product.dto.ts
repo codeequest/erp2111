@@ -66,6 +66,9 @@ export class CreateProductDto {
   salePrice?: number;
 
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0)
+  salePriceTnd?: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0)
   minStock?: number;
 }
 
@@ -114,6 +117,9 @@ export class UpdateProductDto {
 
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0)
   salePrice?: number;
+
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0)
+  salePriceTnd?: number;
 
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0)
   minStock?: number;
