@@ -6,6 +6,7 @@ import { WarehousesController } from './warehouses.controller';
 import { StockController } from './stock.controller';
 import { InventoryService } from './inventory.service';
 import { ProductsService } from './products.service';
+import { ProductsExcelService } from './products-excel.service';
 import { CatalogService } from './catalog.service';
 import { StockService } from './stock.service';
 import { AdjustmentsService } from './adjustments.service';
@@ -18,7 +19,14 @@ import { AdjustmentsService } from './adjustments.service';
     WarehousesController,
     StockController,
   ],
-  providers: [InventoryService, ProductsService, CatalogService, StockService, AdjustmentsService],
+  providers: [
+    InventoryService,
+    ProductsService,
+    ProductsExcelService,
+    CatalogService,
+    StockService,
+    AdjustmentsService,
+  ],
   exports: [InventoryService, ProductsService, CatalogService, StockService, AdjustmentsService],
 })
 export class InventoryModule {}

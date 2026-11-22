@@ -6,14 +6,14 @@ import { RequestUser } from '../../common/types/request-user';
 import { CreateProductDto, ListProductsQueryDto, UpdateProductDto } from './dto/product.dto';
 import { rethrowPrismaError, toAuditJson } from './prisma-errors';
 
-const productInclude = {
+export const productInclude = {
   category: { select: { id: true, name: true } },
   baseUnit: { select: { id: true, code: true, name: true } },
   taxRate: { select: { id: true, name: true, rate: true } },
   stockBalances: { select: { quantity: true } },
 } satisfies Prisma.ProductInclude;
 
-type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+export type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 
 /** Fields copied as-is from the DTO to Prisma (relations are handled separately). */
 const SCALAR_FIELDS = ['sku', 'barcode', 'name', 'description', 'salePrice', 'minStock'] as const;
@@ -26,14 +26,7 @@ export class ProductsService {
     query: ListProductsQueryDto,
     user: RequestUser,
   ): Promise<Paginated<ProductListItem>> {
-    const where: Prisma.ProductWhereInput = {};
-    if (query.status === 'active') where.isActive = true;
-    if (query.status === 'inactive') where.isActive = false;
-    if (query.categoryId) where.categoryId = query.categoryId;
-    if (query.search) {
-      const contains = { contains: query.search, mode: 'insensitive' as const };
-      where.OR = [{ sku: contains }, { name: contains }, { barcode: contains }];
-    }
+    const where = productListWhere(query);
 
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.product.count({ where }),
@@ -175,6 +168,21 @@ export class ProductsService {
 
 // ── mapping ──────────────────────────────────────────────────────────────────
 
+/** Filters shared by the product list and the Excel export. */
+export function productListWhere(
+  query: Pick<ListProductsQueryDto, 'status' | 'categoryId' | 'search'>,
+): Prisma.ProductWhereInput {
+  const where: Prisma.ProductWhereInput = {};
+  if (query.status === 'active') where.isActive = true;
+  if (query.status === 'inactive') where.isActive = false;
+  if (query.categoryId) where.categoryId = query.categoryId;
+  if (query.search) {
+    const contains = { contains: query.search, mode: 'insensitive' as const };
+    where.OR = [{ sku: contains }, { name: contains }, { barcode: contains }];
+  }
+  return where;
+}
+
 export function canSeeCost(user: RequestUser): boolean {
   return user.permissions.has('inventory.cost.view');
 }
@@ -207,7 +215,7 @@ export function toDetail(row: ProductRow, canViewCost: boolean): ProductDetail {
 }
 
 /** What the audit log keeps about a product (no derived stock figures). */
-function auditSnapshot(row: ProductRow) {
+export function auditSnapshot(row: ProductRow) {
   const { stockBalances: _s, category: _c, baseUnit: _u, taxRate: _t, ...fields } = row;
   return fields;
 }

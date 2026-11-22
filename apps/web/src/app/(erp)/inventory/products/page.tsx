@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
@@ -9,20 +9,25 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronLeft,
+  CheckCircle2,
   ChevronRight,
+  Download,
   Loader2,
   Package,
   Plus,
   Search,
+  Upload,
+  X,
 } from 'lucide-react';
 import type {
   CategoryDto,
   Paginated,
+  ProductImportResult,
   ProductListItem,
   ProductSortField,
   ProductStatusFilter,
 } from '@erp/shared';
-import { api } from '@/lib/api';
+import { api, apiDownload } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatAmount, formatQty } from '@/lib/format';
 import { AccessDenied, Breadcrumbs, StatusBadge } from '@/components/page-header';
@@ -48,6 +53,13 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ProductImportResult | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
 
   // Debounce the search box so we don't hit the API on every keystroke.
   useEffect(() => {
@@ -89,7 +101,7 @@ export default function ProductsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canRead, search, categoryId, status, sort, order, page]);
+  }, [canRead, search, categoryId, status, sort, order, page, reloadKey]);
 
   if (!canRead) return <AccessDenied permission="inventory.product.read" what="Products" />;
 
@@ -100,6 +112,45 @@ export default function ProductsPage() {
       setOrder('asc');
     }
     setPage(1);
+  };
+
+  /** Exports every product matching the current filters (not only this page). */
+  const handleExport = async () => {
+    setExporting(true);
+    setTransferError(null);
+    try {
+      const qs = new URLSearchParams({ status, sort, order });
+      // What is typed now, even if the 300 ms list debounce has not fired yet.
+      const term = searchInput.trim();
+      if (term) qs.set('search', term);
+      if (categoryId) qs.set('categoryId', categoryId);
+      await apiDownload(`/inventory/products/export?${qs}`, 'products.xlsx');
+    } catch (e) {
+      setTransferError((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    setImportResult(null);
+    setTransferError(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await api<ProductImportResult>('/inventory/products/import', {
+        method: 'POST',
+        body,
+      });
+      setImportResult(res);
+      if (res.errors.length === 0) setReloadKey((k) => k + 1);
+    } catch (e) {
+      setTransferError((e as Error).message);
+    } finally {
+      setImporting(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
   };
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
@@ -127,16 +178,69 @@ export default function ProductsPage() {
               <p className="text-sm text-slate-500">Product catalogue, prices and stock alerts</p>
             </div>
           </div>
-          {canWrite && (
-            <Link
-              href="/inventory/products/new"
-              className="bg-mod-inventory inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
+          <div className="flex flex-wrap items-center gap-2">
+            {canWrite && (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleImport(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  disabled={importing}
+                  title="Import products from an Excel file (.xlsx)"
+                  className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {importing ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
+                  Import
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleExport()}
+              disabled={exporting}
+              title="Export the products matching the filters to Excel (.xlsx)"
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
             >
-              <Plus className="size-4" /> New product
-            </Link>
-          )}
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              Export
+            </button>
+            {canWrite && (
+              <Link
+                href="/inventory/products/new"
+                className="bg-mod-inventory inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
+              >
+                <Plus className="size-4" /> New product
+              </Link>
+            )}
+          </div>
         </div>
       </div>
+
+      {transferError && (
+        <Notice tone="error" onClose={() => setTransferError(null)}>
+          {transferError}
+        </Notice>
+      )}
+      {importResult && (
+        <ImportResultNotice result={importResult} onClose={() => setImportResult(null)} />
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-3">
@@ -323,6 +427,75 @@ export default function ProductsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function Notice({
+  tone,
+  onClose,
+  children,
+}: {
+  tone: 'success' | 'error';
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={clsx(
+        'flex items-start gap-3 rounded-lg border px-4 py-3 text-sm',
+        tone === 'error'
+          ? 'border-red-200 bg-red-50 text-red-800'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      )}
+    >
+      {tone === 'error' ? (
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      ) : (
+        <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">{children}</div>
+      <button onClick={onClose} aria-label="Dismiss" className="rounded p-0.5 hover:bg-black/5">
+        <X className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+const MAX_SHOWN_ERRORS = 50;
+
+function ImportResultNotice({
+  result,
+  onClose,
+}: {
+  result: ProductImportResult;
+  onClose: () => void;
+}) {
+  if (result.errors.length === 0) {
+    return (
+      <Notice tone="success" onClose={onClose}>
+        Import done: <strong>{result.created}</strong> created, <strong>{result.updated}</strong>{' '}
+        updated, {result.unchanged} unchanged.
+      </Notice>
+    );
+  }
+  const count = result.errors.length;
+  const shown = result.errors.slice(0, MAX_SHOWN_ERRORS);
+  return (
+    <Notice tone="error" onClose={onClose}>
+      <p className="font-medium">
+        Nothing was imported: fix {count === 1 ? 'this error' : `these ${count} errors`} in the file
+        and import it again.
+      </p>
+      <ul className="mt-2 max-h-60 space-y-0.5 overflow-y-auto">
+        {shown.map((e, i) => (
+          <li key={i}>
+            <span className="font-mono text-xs">Row {e.row}</span> — {e.message}
+          </li>
+        ))}
+      </ul>
+      {count > shown.length && <p className="mt-1 text-xs">…and {count - shown.length} more.</p>}
+    </Notice>
   );
 }
 

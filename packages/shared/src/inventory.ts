@@ -203,3 +203,17 @@ export interface StockAdjustmentListItem {
   /** Σ change × unit cost — only with `inventory.cost.view`. Negative = stock value lost. */
   valueChange?: string;
 }
+
+// ── Products Excel import ─────────────────────────────────────────────────────
+
+/**
+ * Outcome of POST /inventory/products/import. The import is all-or-nothing:
+ * when `errors` is not empty, nothing was written (created = updated = 0).
+ */
+export interface ProductImportResult {
+  created: number;
+  updated: number;
+  /** Rows identical to the existing product: nothing to change. */
+  unchanged: number;
+  errors: { row: number; message: string }[];
+}

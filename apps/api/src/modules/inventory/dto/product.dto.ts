@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType, PickType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsIn,
@@ -130,3 +130,12 @@ export class ListProductsQueryDto {
   @Max(100)
   pageSize: number = 25;
 }
+
+/** Same filters and sort as the list, without pagination (every matching product). */
+export class ExportProductsQueryDto extends PickType(ListProductsQueryDto, [
+  'search',
+  'categoryId',
+  'status',
+  'sort',
+  'order',
+] as const) {}

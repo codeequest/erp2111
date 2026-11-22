@@ -45,16 +45,20 @@ export function refreshSession(): Promise<AuthResponse | null> {
   return refreshInFlight;
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+/** Authenticated fetch with one refresh-and-retry on 401; throws ApiRequestError when not ok. */
+async function request(path: string, init: RequestInit, retry: boolean): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData sets its own multipart Content-Type (with the boundary).
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });
 
   if (res.status === 401 && retry && !path.startsWith('/auth/')) {
     const session = await refreshSession();
-    if (session) return api<T>(path, init, false);
+    if (session) return request(path, init, false);
     onSessionExpired?.();
   }
 
@@ -62,6 +66,26 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
     const body = (await res.json().catch(() => undefined)) as ApiError | undefined;
     throw new ApiRequestError(res.status, body);
   }
+  return res;
+}
+
+export async function api<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const res = await request(path, init, retry);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** Downloads a file endpoint and hands it to the browser as a download. */
+export async function apiDownload(path: string, fallbackName: string): Promise<void> {
+  const res = await request(path, {}, true);
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const name = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
