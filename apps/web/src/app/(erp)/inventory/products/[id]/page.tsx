@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Loader2, Power, PowerOff } from 'lucide-react';
+import { CheckCircle2, History, Loader2, Power, PowerOff } from 'lucide-react';
 import type { ProductDetail } from '@erp/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -16,6 +16,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const canRead = can('inventory.product.read');
   const canWrite = can('inventory.product.write');
   const canViewCost = can('inventory.cost.view');
+  const canReadStock = can('inventory.stock.read');
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
@@ -158,6 +159,15 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         {canViewCost && <Stat label="Average cost" value={formatAmount(product.averageCost, 4)} />}
         <Stat label="Last updated" value={new Date(product.updatedAt).toLocaleDateString()} />
       </dl>
+
+      {canReadStock && (
+        <Link
+          href={`/inventory/stock?tab=moves&productId=${product.id}&product=${encodeURIComponent(`${product.sku} — ${product.name}`)}`}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
+        >
+          <History className="size-4" /> View stock movements
+        </Link>
+      )}
 
       <ProductForm
         product={product}
