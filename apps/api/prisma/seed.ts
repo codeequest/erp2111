@@ -48,12 +48,12 @@ async function seedRoles() {
     const existing = await prisma.role.findUnique({ where: { name: role.name } });
     // Only the Admin role is re-synced on every seed; other roles keep
     // whatever the admin changed in the UI once they exist.
-    if (existing && !role.isSystem) continue;
+    if (existing && !role.isProtected) continue;
 
     const saved = await prisma.role.upsert({
       where: { name: role.name },
-      update: { description: role.description, isSystem: role.isSystem },
-      create: { name: role.name, description: role.description, isSystem: role.isSystem },
+      update: { description: role.description, isSystem: role.isProtected },
+      create: { name: role.name, description: role.description, isSystem: role.isProtected },
     });
     await prisma.rolePermission.deleteMany({ where: { roleId: saved.id } });
     await prisma.rolePermission.createMany({

@@ -1,12 +1,56 @@
-import { ALL_PERMISSIONS, DEFAULT_ROLES, NAVIGATION, PERMISSION_DEFINITIONS } from '@erp/shared';
+import {
+  ALL_PERMISSIONS,
+  DEFAULT_ROLES,
+  isPrivileged,
+  LEGACY_PERMISSION_MAP,
+  NAVIGATION,
+  PERMISSION_DEFINITIONS,
+  PermissionCode,
+  ROLE_COLORS,
+  ROLE_TEMPLATES,
+  SENSITIVE_PERMISSIONS,
+} from '@erp/shared';
 
 describe('shared permission model', () => {
-  it('has unique permission codes in module.resource.action format', () => {
+  it('has unique codes in module.resource.action format', () => {
     expect(new Set(ALL_PERMISSIONS).size).toBe(ALL_PERMISSIONS.length);
     for (const p of PERMISSION_DEFINITIONS) {
-      expect(p.code).toMatch(/^[a-z]+\.[a-z]+\.[a-z]+$/);
-      expect(p.code.startsWith(p.module + '.')).toBe(true);
+      expect(p.code).toMatch(/^[a-z]+\.[a-z]+\.[a-z_]+$/);
+      expect(p.code).toBe(`${p.module}.${p.resource}.${p.action}`);
+      expect(p.label.length).toBeGreaterThan(0);
     }
+  });
+
+  it('maps every legacy admin code onto existing codes', () => {
+    for (const targets of Object.values(LEGACY_PERMISSION_MAP))
+      targets.forEach((t) => expect(ALL_PERMISSIONS).toContain(t));
+    expect(ALL_PERMISSIONS).not.toContain('admin.users.manage');
+    expect(ALL_PERMISSIONS).not.toContain('admin.roles.manage');
+  });
+
+  it('marks the privileged admin actions sensitive', () => {
+    for (const c of [
+      'admin.user.deactivate',
+      'admin.user.assign_roles',
+      'admin.permission.manage',
+      'admin.security.manage',
+    ])
+      expect(SENSITIVE_PERMISSIONS.has(c as PermissionCode)).toBe(true);
+    expect(isPrivileged(['admin.user.view'])).toBe(false);
+    expect(isPrivileged(['admin.user.view', 'admin.session.revoke'])).toBe(true);
+  });
+
+  it('protects only the Admin role and uses palette colours', () => {
+    expect(DEFAULT_ROLES.filter((r) => r.isProtected).map((r) => r.name)).toEqual(['Admin']);
+    for (const r of DEFAULT_ROLES) expect(ROLE_COLORS).toContain(r.color);
+  });
+
+  it('uses only known permissions in templates', () => {
+    ROLE_TEMPLATES.forEach((t) =>
+      t.permissions.forEach((p) => expect(ALL_PERMISSIONS).toContain(p)),
+    );
+    const userManager = ROLE_TEMPLATES.find((t) => t.key === 'user-manager')!;
+    expect(userManager.permissions.some((p) => /^admin\.(role|permission)\./.test(p))).toBe(false);
   });
 
   it('gives the Admin role every permission', () => {

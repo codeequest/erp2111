@@ -15,42 +15,42 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get('permissions')
-  @RequirePermissions('admin.roles.manage')
+  @RequirePermissions('admin.role.view')
   @ApiOperation({ summary: 'List every permission, grouped by module' })
   getPermissions() {
     return notImplemented('Admin · Roles: List every permission, grouped by module');
   }
 
   @Get()
-  @RequirePermissions('admin.roles.manage')
+  @RequirePermissions('admin.role.view')
   @ApiOperation({ summary: 'List roles' })
   findAll() {
     return notImplemented('Admin · Roles: List roles');
   }
 
   @Get(':id')
-  @RequirePermissions('admin.roles.manage')
+  @RequirePermissions('admin.role.view')
   @ApiOperation({ summary: 'Get a role with its permissions' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Roles: Get a role with its permissions');
   }
 
   @Post()
-  @RequirePermissions('admin.roles.manage')
+  @RequirePermissions('admin.role.view')
   @ApiOperation({ summary: 'Create a role' })
   create() {
     return notImplemented('Admin · Roles: Create a role');
   }
 
   @Patch(':id')
-  @RequirePermissions('admin.roles.manage')
+  @RequirePermissions('admin.role.view')
   @ApiOperation({ summary: 'Update a role name / permissions' })
   update(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Roles: Update a role name / permissions');
   }
 
   @Delete(':id')
-  @RequirePermissions('admin.roles.manage')
+  @RequirePermissions('admin.role.view')
   @ApiOperation({ summary: 'Delete a role (not allowed for system roles)' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Roles: Delete a role (not allowed for system roles)');

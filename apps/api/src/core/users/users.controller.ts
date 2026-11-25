@@ -15,49 +15,49 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'List users' })
   findAll() {
     return notImplemented('Admin · Users: List users');
   }
 
   @Get(':id')
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'Get a user with their roles' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Users: Get a user with their roles');
   }
 
   @Post()
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'Create a user and assign roles' })
   create() {
     return notImplemented('Admin · Users: Create a user and assign roles');
   }
 
   @Patch(':id')
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'Update a user (name, email, roles)' })
   update(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Users: Update a user (name, email, roles)');
   }
 
   @Post(':id/deactivate')
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'Deactivate a user (users are never deleted)' })
   deactivate(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Users: Deactivate a user (users are never deleted)');
   }
 
   @Post(':id/activate')
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'Re-activate a user' })
   activate(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Users: Re-activate a user');
   }
 
   @Post(':id/reset-password')
-  @RequirePermissions('admin.users.manage')
+  @RequirePermissions('admin.user.view')
   @ApiOperation({ summary: 'Set a new password for a user' })
   resetPassword(@Param('id', ParseUUIDPipe) id: string) {
     return notImplemented('Admin · Users: Set a new password for a user');

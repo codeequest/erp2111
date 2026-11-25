@@ -1,10 +1,29 @@
 import { ALL_PERMISSIONS, PermissionCode } from './permissions';
 
+export type RoleType = 'SYSTEM' | 'CUSTOM';
+
+/** Fixed colour palette for roles; the web app maps each key to Tailwind classes. */
+export const ROLE_COLORS = [
+  'slate',
+  'blue',
+  'emerald',
+  'amber',
+  'rose',
+  'violet',
+  'cyan',
+  'orange',
+] as const;
+
+export type RoleColor = (typeof ROLE_COLORS)[number];
+
 export interface DefaultRole {
   name: string;
   description: string;
-  /** System roles cannot be deleted from the admin UI. */
-  isSystem: boolean;
+  /** SYSTEM roles cannot be deleted or renamed from the admin UI. */
+  type: RoleType;
+  /** Protected roles (Admin) cannot be edited at all. */
+  isProtected: boolean;
+  color: RoleColor;
   permissions: PermissionCode[];
 }
 
@@ -16,13 +35,17 @@ export const DEFAULT_ROLES: DefaultRole[] = [
   {
     name: 'Admin',
     description: 'Full access to every module and to administration',
-    isSystem: true,
+    type: 'SYSTEM',
+    isProtected: true,
+    color: 'slate',
     permissions: ALL_PERMISSIONS,
   },
   {
     name: 'Sales clerk',
     description: 'Customers, quotations, sales orders and returns',
-    isSystem: false,
+    type: 'SYSTEM',
+    isProtected: false,
+    color: 'blue',
     permissions: [
       'dashboard.summary.view',
       'inventory.product.read',
@@ -39,7 +62,9 @@ export const DEFAULT_ROLES: DefaultRole[] = [
   {
     name: 'Purchaser',
     description: 'Suppliers and purchase orders',
-    isSystem: false,
+    type: 'SYSTEM',
+    isProtected: false,
+    color: 'emerald',
     permissions: [
       'dashboard.summary.view',
       'inventory.product.read',
@@ -56,7 +81,9 @@ export const DEFAULT_ROLES: DefaultRole[] = [
   {
     name: 'Storekeeper',
     description: 'Stock movements, goods receipts and deliveries',
-    isSystem: false,
+    type: 'SYSTEM',
+    isProtected: false,
+    color: 'amber',
     permissions: [
       'dashboard.summary.view',
       'inventory.product.read',
@@ -72,7 +99,9 @@ export const DEFAULT_ROLES: DefaultRole[] = [
   {
     name: 'Accountant',
     description: 'Invoices, supplier bills, payments and credit notes',
-    isSystem: false,
+    type: 'SYSTEM',
+    isProtected: false,
+    color: 'violet',
     permissions: [
       'dashboard.summary.view',
       'inventory.product.read',
@@ -94,7 +123,9 @@ export const DEFAULT_ROLES: DefaultRole[] = [
   {
     name: 'Viewer',
     description: 'Read-only access (no purchase costs)',
-    isSystem: false,
+    type: 'SYSTEM',
+    isProtected: false,
+    color: 'cyan',
     permissions: [
       'dashboard.summary.view',
       'inventory.product.read',
@@ -107,5 +138,59 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'invoicing.bill.read',
       'invoicing.payment.read',
     ],
+  },
+];
+
+export interface RoleTemplate {
+  key: string;
+  name: string;
+  description: string;
+  permissions: PermissionCode[];
+}
+
+/** Starting points offered when creating a role. */
+export const ROLE_TEMPLATES: RoleTemplate[] = [
+  {
+    key: 'read-only',
+    name: 'Read-only',
+    description: 'View everything except purchase costs and administration',
+    permissions: ALL_PERMISSIONS.filter(
+      (p) => !p.startsWith('admin.') && p !== 'inventory.cost.view' && /\.(read|view)$/.test(p),
+    ),
+  },
+  {
+    key: 'helpdesk',
+    name: 'Helpdesk',
+    description: 'Help users who are locked out or lost their second factor',
+    permissions: [
+      'admin.user.view',
+      'admin.user.reset_password',
+      'admin.user.manage_mfa',
+      'admin.session.revoke',
+      'admin.audit.read',
+    ],
+  },
+  {
+    key: 'user-manager',
+    name: 'User manager',
+    description: 'Manage user accounts without touching roles or permissions',
+    permissions: [
+      'admin.user.view',
+      'admin.user.create',
+      'admin.user.update',
+      'admin.user.activate',
+      'admin.user.deactivate',
+      'admin.user.reset_password',
+      'admin.user.assign_roles',
+      'admin.user.manage_mfa',
+      'admin.user.export',
+      'admin.session.revoke',
+    ],
+  },
+  {
+    key: 'auditor',
+    name: 'Auditor',
+    description: 'Read-only view of the audit trail, users and roles',
+    permissions: ['admin.audit.read', 'admin.security.view', 'admin.user.view', 'admin.role.view'],
   },
 ];
