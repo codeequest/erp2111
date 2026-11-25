@@ -75,7 +75,7 @@ export const PERMISSION_DEFINITIONS = [
     action: 'adjust',
     label: 'Adjust stock',
     description: 'Post stock adjustments',
-    sensitive: true,
+    sensitive: false,
   },
   {
     code: 'inventory.stock.transfer',
@@ -93,7 +93,7 @@ export const PERMISSION_DEFINITIONS = [
     action: 'view',
     label: 'View purchase costs',
     description: 'See purchase cost and margins',
-    sensitive: true,
+    sensitive: false,
   },
 
   // Purchasing
@@ -223,7 +223,7 @@ export const PERMISSION_DEFINITIONS = [
     action: 'override',
     label: 'Override credit limit',
     description: 'Confirm orders above the customer credit limit',
-    sensitive: true,
+    sensitive: false,
   },
 
   // Invoicing
@@ -252,7 +252,7 @@ export const PERMISSION_DEFINITIONS = [
     action: 'post',
     label: 'Post invoices',
     description: 'Post (finalize) or cancel invoices and credit notes',
-    sensitive: true,
+    sensitive: false,
   },
   {
     code: 'invoicing.bill.read',

@@ -40,6 +40,29 @@ describe('shared permission model', () => {
     expect(isPrivileged(['admin.user.view', 'admin.session.revoke'])).toBe(true);
   });
 
+  it('lists the exact codes each legacy admin code expands to', () => {
+    expect(new Set(LEGACY_PERMISSION_MAP['admin.users.manage'])).toEqual(
+      new Set([...ALL_PERMISSIONS.filter((p) => p.startsWith('admin.user.')), 'admin.session.revoke']),
+    );
+    expect(new Set(LEGACY_PERMISSION_MAP['admin.roles.manage'])).toEqual(
+      new Set([...ALL_PERMISSIONS.filter((p) => p.startsWith('admin.role.')), 'admin.permission.manage']),
+    );
+    expect(LEGACY_PERMISSION_MAP['admin.audit.read']).toEqual(['admin.audit.read', 'admin.security.view']);
+  });
+
+  it('keeps business permissions non-sensitive so only Admin is privileged', () => {
+    for (const p of PERMISSION_DEFINITIONS.filter((d) => d.module !== 'admin'))
+      expect(p.sensitive).toBe(false);
+    expect(DEFAULT_ROLES.filter((r) => isPrivileged(r.permissions)).map((r) => r.name)).toEqual([
+      'Admin',
+    ]);
+  });
+
+  it('exposes the security overview in navigation', () => {
+    const item = NAVIGATION.flatMap((m) => m.items).find((i) => i.key === 'security');
+    expect(item).toMatchObject({ href: '/admin/security', permission: 'admin.security.view' });
+  });
+
   it('protects only the Admin role and uses palette colours', () => {
     expect(DEFAULT_ROLES.filter((r) => r.isProtected).map((r) => r.name)).toEqual(['Admin']);
     for (const r of DEFAULT_ROLES) expect(ROLE_COLORS).toContain(r.color);
