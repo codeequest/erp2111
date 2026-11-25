@@ -17,7 +17,7 @@ export class UserAccessService {
         },
       },
     });
-    if (!user || !user.isActive) return null;
+    if (!user || user.status !== 'ACTIVE') return null;
 
     const permissions = new Set<PermissionCode>();
     for (const { role } of user.roles) {

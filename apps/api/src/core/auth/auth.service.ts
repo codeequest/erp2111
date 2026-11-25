@@ -29,8 +29,12 @@ export class AuthService {
 
   async login(email: string, password: string, client: ClientInfo): Promise<IssuedSession> {
     const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    // Same error for unknown email, wrong password and deactivated user.
-    const valid = user?.isActive && (await argon2.verify(user.passwordHash, password));
+    // Same error for unknown email, wrong password, non-active user and a user
+    // without a password yet (invited): none of them can log in.
+    const valid =
+      user?.status === 'ACTIVE' &&
+      user.passwordHash !== null &&
+      (await argon2.verify(user.passwordHash, password));
     if (!user || !valid) throw new UnauthorizedException('Invalid email or password');
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -54,7 +58,7 @@ export class AuthService {
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
-    return this.issueSession(stored.userId, client);
+    return this.issueSession(stored.userId, client, stored.sessionId);
   }
 
   async logout(refreshToken: string | undefined): Promise<void> {
@@ -69,7 +73,12 @@ export class AuthService {
     return this.userAccess.toAuthUser(user);
   }
 
-  private async issueSession(userId: string, client: ClientInfo): Promise<IssuedSession> {
+  /** Issues tokens; a refresh rotates within `sessionId`, a login opens a new session. */
+  private async issueSession(
+    userId: string,
+    client: ClientInfo,
+    sessionId?: string,
+  ): Promise<IssuedSession> {
     const user = await this.userAccess.loadActiveUser(userId);
     if (!user) throw new UnauthorizedException('User not found or deactivated');
 
@@ -79,9 +88,23 @@ export class AuthService {
     const refreshToken = randomBytes(48).toString('base64url');
     const days = Number(this.config.get('REFRESH_TOKEN_TTL_DAYS', 7));
     const refreshExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const session = sessionId
+      ? await this.prisma.session.update({
+          where: { id: sessionId },
+          data: { lastSeenAt: new Date(), expiresAt: refreshExpiresAt },
+        })
+      : await this.prisma.session.create({
+          data: {
+            userId: user.id,
+            expiresAt: refreshExpiresAt,
+            ip: client.ip,
+            userAgent: client.userAgent,
+          },
+        });
     await this.prisma.refreshToken.create({
       data: {
         userId: user.id,
+        sessionId: session.id,
         tokenHash: this.hash(refreshToken),
         expiresAt: refreshExpiresAt,
         ip: client.ip,
