@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createTransport, Transporter } from 'nodemailer';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isDevOutbox } from './mail-config';
 import { MailTemplate, render } from './templates';
 
 export interface SendVars {
@@ -11,7 +12,7 @@ export interface SendVars {
 }
 
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
   private transport: Pick<Transporter, 'sendMail'> | null = null;
 
@@ -20,8 +21,28 @@ export class MailService {
     private readonly config: ConfigService,
   ) {}
 
-  private get mode(): 'outbox' | 'smtp' {
-    return this.config.get<string>('MAIL_TRANSPORT', 'outbox') === 'smtp' ? 'smtp' : 'outbox';
+  /** smtp: really send. outbox: dev only, store body. none: record metadata only, deliver nothing. */
+  private get mode(): 'outbox' | 'smtp' | 'none' {
+    const transport = this.config.get<string>('MAIL_TRANSPORT');
+    if (transport === 'smtp') return 'smtp';
+    const dev = isDevOutbox({
+      MAIL_TRANSPORT: transport,
+      NODE_ENV: this.config.get<string>('NODE_ENV'),
+    });
+    return dev ? 'outbox' : 'none';
+  }
+
+  onModuleInit(): void {
+    const transport = this.config.get<string>('MAIL_TRANSPORT');
+    if (transport === 'smtp') {
+      if (!this.config.get<string>('SMTP_HOST')) {
+        this.logger.warn('MAIL_TRANSPORT=smtp but SMTP_HOST is empty; emails will fail to send.');
+      }
+    } else if (this.mode === 'none') {
+      this.logger.warn(
+        'No mail transport configured (MAIL_TRANSPORT); emails are recorded without content and not delivered.',
+      );
+    }
   }
 
   private getTransport(): Pick<Transporter, 'sendMail'> {
@@ -49,6 +70,7 @@ export class MailService {
   /** Never throws: failures are recorded on the outbox row (or logged) without the body. */
   async send(to: string, template: MailTemplate, vars: SendVars): Promise<void> {
     let rowId: string | null = null;
+    let delivered = false;
     try {
       const company = await this.companyName();
       const mail = render(template, { company, ...vars });
@@ -72,12 +94,18 @@ export class MailService {
           text: mail.text,
         });
       }
+      delivered = true;
       await this.prisma.emailOutbox.update({
         where: { id: rowId },
         data: { status: 'SENT', sentAt: new Date() },
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      if (delivered) {
+        // Mail went out; only the bookkeeping failed. Don't mark it FAILED.
+        this.logger.warn(`Email "${template}" was sent but its outbox row could not be updated: ${message}`);
+        return;
+      }
       this.logger.error(`Failed to send "${template}" email: ${message}`);
       if (rowId) {
         try {

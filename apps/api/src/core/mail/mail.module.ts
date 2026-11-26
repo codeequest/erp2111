@@ -1,5 +1,6 @@
 import { DynamicModule, Global, Module } from '@nestjs/common';
 import { DevOutboxController } from './dev-outbox.controller';
+import { isDevOutbox } from './mail-config';
 import { MailService } from './mail.service';
 
 @Global()
@@ -7,9 +8,7 @@ import { MailService } from './mail.service';
 export class MailModule {
   /** Call after ConfigModule.forRoot() so .env values are already in process.env. */
   static register(): DynamicModule {
-    const devOutbox =
-      (process.env.MAIL_TRANSPORT ?? 'outbox') === 'outbox' &&
-      process.env.NODE_ENV !== 'production';
+    const devOutbox = isDevOutbox();
     return {
       module: MailModule,
       providers: [MailService],

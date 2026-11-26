@@ -75,7 +75,7 @@ const DEFS: Record<MailTemplate, Def> = {
   account_deactivated: {
     subject: (c) => `Your ${c} account was deactivated`,
     lines: (c) => [`Your ${c} account was deactivated. You can no longer sign in.`],
-    footer: 'If you think this is a mistake, contact your administrator.',
+    footer: IGNORE,
   },
 };
 

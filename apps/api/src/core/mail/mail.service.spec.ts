@@ -52,3 +52,26 @@ describe('MailService', () => {
     await expect(svc.send('a@b.c', 'invitation', vars)).resolves.toBeUndefined();
   });
 });
+
+describe('MailService body storage', () => {
+  it('stores no body when NODE_ENV=production even with outbox', async () => {
+    const { svc, prisma, sendMail } = make({ MAIL_TRANSPORT: 'outbox', NODE_ENV: 'production' });
+    await svc.send('a@b.c', 'invitation', vars);
+    expect(prisma.emailOutbox.create.mock.calls[0][0].data.body).toBeNull();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('stores no body when MAIL_TRANSPORT is unset', async () => {
+    const { svc, prisma } = make({});
+    await svc.send('a@b.c', 'invitation', vars);
+    expect(prisma.emailOutbox.create.mock.calls[0][0].data.body).toBeNull();
+    expect(prisma.emailOutbox.update.mock.calls[0][0].data.status).toBe('SENT');
+  });
+
+  it('does not mark FAILED when mail was sent but the SENT update fails', async () => {
+    const { svc, prisma } = make({ MAIL_TRANSPORT: 'smtp', SMTP_HOST: 'h' });
+    prisma.emailOutbox.update.mockRejectedValueOnce(new Error('db'));
+    await svc.send('a@b.c', 'invitation', vars);
+    expect(prisma.emailOutbox.update).toHaveBeenCalledTimes(1);
+  });
+});

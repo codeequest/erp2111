@@ -35,4 +35,10 @@ describe('render', () => {
     );
     expect(render('mfa_reset', v).text).toContain('contact your administrator immediately');
   });
+
+  it('escapes a quote in the link so the href cannot be broken out of', () => {
+    const r = render('invitation', { company: 'ACME', name: 'Jo', link: 'https://x/"onmouseover="a' });
+    expect(r.html).toContain('https://x/&quot;onmouseover=&quot;a');
+    expect(r.html).not.toContain('href="https://x/"onmouseover');
+  });
 });
