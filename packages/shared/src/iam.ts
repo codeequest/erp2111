@@ -267,3 +267,13 @@ export interface PasswordPolicyHints {
   minLength: number;
   maxLength: number;
 }
+
+/** GET /account/security */
+export interface AccountSecurity {
+  mfaEnabled: boolean;
+  /** True when the user may not turn MFA off (flag on the user or privileged + policy). */
+  mfaRequired: boolean;
+  recoveryCodesLeft: number;
+  passwordChangedAt: string | null;
+  sessions: SessionInfo[];
+}
