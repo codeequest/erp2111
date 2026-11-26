@@ -22,11 +22,28 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
 export class ApiRequestError extends Error {
   constructor(
     public readonly status: number,
-    public readonly body: ApiError | undefined,
+    public readonly body: (ApiError & { code?: string }) | undefined,
   ) {
     const msg = body?.message;
     super(Array.isArray(msg) ? msg.join(', ') : (msg ?? `Request failed (${status})`));
   }
+
+  /** Policy code from the API (e.g. LAST_ADMIN, ESCALATION, SELF_LOCKOUT). */
+  get code(): string | undefined {
+    return this.body?.code;
+  }
+
+  /** Every message as a list (validation errors come as an array). */
+  get messages(): string[] {
+    const msg = this.body?.message;
+    return Array.isArray(msg) ? msg : [this.message];
+  }
+}
+
+/** Human message for any thrown value. */
+export function errorMessage(e: unknown, fallback = 'Something went wrong. Please try again.') {
+  if (e instanceof ApiRequestError) return e.message;
+  return fallback;
 }
 
 /** Shared by all callers so parallel 401s trigger only one refresh. */

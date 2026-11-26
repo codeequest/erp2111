@@ -20,3 +20,173 @@ body {
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
 }
+
+/* ─── Motion (admin UI kit) ───────────────────────────────────────────────
+   CSS-only. Everything below is switched off under prefers-reduced-motion. */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@utility animate-fade-in {
+  animation: fade-in 200ms ease-out both;
+}
+@utility animate-scale-in {
+  animation: scale-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@utility animate-slide-in-right {
+  animation: slide-in-right 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@utility animate-shake {
+  animation: shake 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+@utility animate-pop {
+  animation: pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@utility animate-draw {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: draw 360ms 180ms ease-out forwards;
+}
+@utility animate-toast-in {
+  animation: toast-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Children fade up one after another; set style={{'--i': index}} on each child. */
+.stagger > * {
+  animation: fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* Skeleton shimmer */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-slate-200);
+}
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+/* Lift on hover for clickable cards */
+.lift {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 24px -12px rgb(15 23 42 / 0.25),
+    0 0 0 1px rgb(99 102 241 / 0.15);
+}
+.lift:active {
+  transform: translateY(0) scale(0.99);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .lift:hover {
+    transform: none;
+  }
+}

@@ -62,7 +62,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <p className="border-t border-slate-800 px-5 py-3 text-xs text-slate-500">
-        v0.1.0 · skeleton
+        v0.2.0 · identity & access
       </p>
     </nav>
   );

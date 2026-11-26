@@ -12,6 +12,7 @@ import {
   Receipt,
   ReceiptText,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
@@ -47,6 +48,7 @@ export const ITEM_ICONS: Record<string, LucideIcon> = {
   roles: ShieldCheck,
   settings: Settings,
   audit: History,
+  security: ShieldAlert,
 };
 
 export const MODULE_ICONS: Record<ErpModuleKey, LucideIcon> = {
