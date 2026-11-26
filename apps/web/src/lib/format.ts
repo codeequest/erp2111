@@ -15,7 +15,7 @@ export function formatQty(value: string | null | undefined): string {
 }
 
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 // English, like the rest of the UI (the browser locale would mix languages).
@@ -41,7 +41,7 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+  return new Date(iso).toLocaleDateString('en-GB', { dateStyle: 'medium' });
 }
 
 /** "Chrome on Windows" from a user agent string. */

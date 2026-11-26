@@ -501,7 +501,6 @@ export function UserForm({ user }: { user?: UserDetail }) {
               )}
             </Card>
           </div>
-
         </div>
 
         <aside className="space-y-6 xl:sticky xl:top-4 xl:self-start">
