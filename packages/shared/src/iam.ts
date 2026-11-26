@@ -267,7 +267,27 @@ export interface SecurityOverview {
   neverLoggedIn: number;
   dormant: number;
   overdueAccessReviews: number;
+  /** Users needing attention, up to 10 per list (count is the full number). */
+  lists: Record<SecurityListKey, { count: number; users: SecurityUserMini[] }>;
   recentActivity: AuditEntryDto[];
+}
+
+export type SecurityListKey =
+  | 'withoutMfaPrivileged'
+  | 'neverLoggedIn'
+  | 'dormant'
+  | 'reviewOverdue'
+  | 'excessive'
+  | 'pendingInvitations'
+  | 'locked';
+
+export interface SecurityUserMini {
+  id: string;
+  fullName: string;
+  email: string;
+  lastLoginAt: string | null;
+  /** Short reason shown next to the name, e.g. "12 sensitive permissions". */
+  note: string | null;
 }
 
 export type LoginChallengeKind = 'password_change' | 'mfa_enroll' | 'mfa';

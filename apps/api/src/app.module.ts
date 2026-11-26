@@ -15,6 +15,7 @@ import { RolesModule } from './core/roles/roles.module';
 import { SettingsModule } from './core/settings/settings.module';
 import { AuditModule } from './core/audit/audit.module';
 import { MailModule } from './core/mail/mail.module';
+import { SecurityModule } from './core/security/security.module';
 // Business modules
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
@@ -33,6 +34,7 @@ import { InvoicingModule } from './modules/invoicing/invoicing.module';
     RolesModule,
     SettingsModule,
     AuditModule,
+    SecurityModule,
     MailModule.register(),
     DashboardModule,
     InventoryModule,

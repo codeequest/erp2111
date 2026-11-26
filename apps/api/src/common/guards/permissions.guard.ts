@@ -1,8 +1,15 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+  Optional,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionCode } from '@erp/shared';
 import { PERMISSIONS_KEY } from '../decorators/require-permissions.decorator';
 import { RequestUser } from '../types/request-user';
+import { AccessDeniedRecorder } from '../../core/audit/access-denied.recorder';
 
 /**
  * Global guard: checks @RequirePermissions() against the user's effective
@@ -10,7 +17,10 @@ import { RequestUser } from '../types/request-user';
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    @Optional() private readonly denied?: AccessDeniedRecorder,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const required = this.reflector.getAllAndOverride<PermissionCode[]>(PERMISSIONS_KEY, [
@@ -19,11 +29,13 @@ export class PermissionsGuard implements CanActivate {
     ]);
     if (!required || required.length === 0) return true;
 
-    const user: RequestUser | undefined = context.switchToHttp().getRequest().user;
+    const request = context.switchToHttp().getRequest();
+    const user: RequestUser | undefined = request.user;
     if (!user) throw new ForbiddenException();
 
     const missing = required.filter((p) => !user.permissions.has(p));
     if (missing.length > 0) {
+      this.denied?.record(request, missing);
       throw new ForbiddenException(`Missing permission: ${missing.join(', ')}`);
     }
     return true;
