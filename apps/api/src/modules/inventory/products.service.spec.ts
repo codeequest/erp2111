@@ -14,6 +14,7 @@ const userWith = (...perms: PermissionCode[]): RequestUser => ({
   fullName: 'Test User',
   roles: [],
   permissions: new Set(perms),
+  sessionId: 's1',
 });
 
 const product = {

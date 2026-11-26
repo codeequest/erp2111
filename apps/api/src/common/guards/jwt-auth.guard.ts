@@ -5,6 +5,7 @@ import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { AccessTokenPayload } from '../types/request-user';
 import { UserAccessService } from '../../core/auth/user-access.service';
+import { SessionsService } from '../../core/auth/sessions.service';
 
 /**
  * Global guard: every route needs a valid `Authorization: Bearer <accessToken>`
@@ -19,6 +20,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwt: JwtService,
     private readonly userAccess: UserAccessService,
+    private readonly sessions: SessionsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -32,17 +34,24 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractToken(request);
     if (!token) throw new UnauthorizedException('Missing access token');
 
-    let payload: AccessTokenPayload;
+    let payload: AccessTokenPayload & { purpose?: unknown };
     try {
-      payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
+      payload = await this.jwt.verifyAsync<AccessTokenPayload & { purpose?: unknown }>(token);
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
+    }
+    // Challenge tokens share the signing secret: never accept them as access tokens.
+    if (payload.purpose !== undefined || typeof payload.sid !== 'string') {
+      throw new UnauthorizedException('Invalid or expired access token');
+    }
+    if (!(await this.sessions.isActive(payload.sid))) {
+      throw new UnauthorizedException('Session ended, please log in again');
     }
 
     const user = await this.userAccess.loadActiveUser(payload.sub);
     if (!user) throw new UnauthorizedException('User not found or deactivated');
 
-    request.user = user;
+    request.user = { ...user, sessionId: payload.sid };
     return true;
   }
 

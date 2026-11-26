@@ -2,20 +2,18 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { createHash, randomBytes } from 'node:crypto';
 import { AuthResponse } from '@erp/shared';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AccessTokenPayload, RequestUser } from '../../common/types/request-user';
+import { AccessTokenPayload, LoadedUser, RequestUser } from '../../common/types/request-user';
+import { ClientInfo } from '../../common/client-info';
+import { hashToken } from '../iam/tokens';
+import { CreatedSession, SessionsService } from './sessions.service';
 import { UserAccessService } from './user-access.service';
-
-export interface ClientInfo {
-  ip?: string;
-  userAgent?: string;
-}
 
 export interface IssuedSession extends AuthResponse {
   refreshToken: string;
   refreshExpiresAt: Date;
+  sessionId: string;
 }
 
 @Injectable()
@@ -25,6 +23,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly userAccess: UserAccessService,
+    private readonly sessions: SessionsService,
   ) {}
 
   async login(email: string, password: string, client: ClientInfo): Promise<IssuedSession> {
@@ -44,78 +43,47 @@ export class AuthService {
     return this.issueSession(user.id, client);
   }
 
-  /** Exchanges a valid refresh token for a new session (the old token is revoked). */
+  /** Exchanges a valid refresh token for a new one in the same session. */
   async refresh(refreshToken: string | undefined, client: ClientInfo): Promise<IssuedSession> {
-    if (!refreshToken) throw new UnauthorizedException('Missing refresh token');
-
-    const stored = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash: this.hash(refreshToken) },
-    });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('Session expired, please log in again');
+    const rotated = await this.sessions.rotate(refreshToken, client);
+    const user = await this.userAccess.loadActiveUser(rotated.userId);
+    if (!user) {
+      await this.sessions.revoke(rotated.sessionId, 'user_inactive');
+      throw new UnauthorizedException('User not found or deactivated');
     }
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
-    return this.issueSession(stored.userId, client, stored.sessionId);
+    return this.sign(user, rotated);
   }
 
   async logout(refreshToken: string | undefined): Promise<void> {
     if (!refreshToken) return;
-    await this.prisma.refreshToken.updateMany({
-      where: { tokenHash: this.hash(refreshToken), revokedAt: null },
-      data: { revokedAt: new Date() },
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(refreshToken) },
+      select: { sessionId: true },
     });
+    if (stored) await this.sessions.revoke(stored.sessionId, 'logout');
   }
 
   me(user: RequestUser) {
     return this.userAccess.toAuthUser(user);
   }
 
-  /** Issues tokens; a refresh rotates within `sessionId`, a login opens a new session. */
-  private async issueSession(
-    userId: string,
-    client: ClientInfo,
-    sessionId?: string,
-  ): Promise<IssuedSession> {
+  /** Opens a new session for an active user and signs its first access token. */
+  async issueSession(userId: string, client: ClientInfo): Promise<IssuedSession> {
     const user = await this.userAccess.loadActiveUser(userId);
     if (!user) throw new UnauthorizedException('User not found or deactivated');
-
-    const payload: AccessTokenPayload = { sub: user.id, email: user.email };
-    const accessToken = await this.jwt.signAsync(payload);
-
-    const refreshToken = randomBytes(48).toString('base64url');
-    const days = Number(this.config.get('REFRESH_TOKEN_TTL_DAYS', 7));
-    const refreshExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    const session = sessionId
-      ? await this.prisma.session.update({
-          where: { id: sessionId },
-          data: { lastSeenAt: new Date(), expiresAt: refreshExpiresAt },
-        })
-      : await this.prisma.session.create({
-          data: {
-            userId: user.id,
-            expiresAt: refreshExpiresAt,
-            ip: client.ip,
-            userAgent: client.userAgent,
-          },
-        });
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        sessionId: session.id,
-        tokenHash: this.hash(refreshToken),
-        expiresAt: refreshExpiresAt,
-        ip: client.ip,
-        userAgent: client.userAgent,
-      },
-    });
-
-    return { accessToken, user: this.userAccess.toAuthUser(user), refreshToken, refreshExpiresAt };
+    const created = await this.sessions.create(user.id, client);
+    return this.sign(user, created);
   }
 
-  private hash(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
+  private async sign(user: LoadedUser, s: CreatedSession): Promise<IssuedSession> {
+    const payload: AccessTokenPayload = { sub: user.id, email: user.email, sid: s.sessionId };
+    const accessToken = await this.jwt.signAsync(payload);
+    return {
+      accessToken,
+      user: this.userAccess.toAuthUser(user),
+      refreshToken: s.refreshToken,
+      refreshExpiresAt: s.refreshExpiresAt,
+      sessionId: s.sessionId,
+    };
   }
 }
