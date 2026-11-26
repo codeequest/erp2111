@@ -11,13 +11,11 @@ import {
   Lock,
   MailPlus,
   RefreshCw,
-  Search,
   SearchX,
   ShieldOff,
   UserCheck,
   UserCog,
   Users,
-  X,
 } from 'lucide-react';
 import type { Page, UserListItem, UserStats } from '@erp/shared';
 import { api, apiDownload, ApiRequestError, errorMessage } from '@/lib/api';
@@ -25,7 +23,7 @@ import { useAuth } from '@/lib/auth';
 import { toQuery, useRoles } from '@/lib/admin-data';
 import { useDebounced } from '@/lib/use-debounced';
 import { useUrlState } from '@/lib/use-url-state';
-import { btnPrimary, btnSecondary, cardClass, inputClass } from '@/components/admin/buttons';
+import { btnPrimary, btnSecondary, cardClass } from '@/components/admin/buttons';
 import { EmptyState } from '@/components/admin/empty-state';
 import { ForbiddenState } from '@/components/admin/forbidden-state';
 import { Drawer } from '@/components/admin/modal';
@@ -42,6 +40,7 @@ import {
   type UserFilterState,
 } from '@/components/admin/users/user-filters';
 import { UsersTable, type UserSort } from '@/components/admin/users/users-table';
+import { freeText, SmartSearch } from '@/components/admin/users/smart-search';
 import { useUserActions } from '@/components/admin/users/use-user-actions';
 
 const DEFAULTS = {
@@ -58,7 +57,8 @@ function UsersPageInner() {
   const toast = useToast();
   const [state, patch, reset] = useUrlState(DEFAULTS);
   const [searchText, setSearchText] = useState(state.search);
-  const debounced = useDebounced(searchText, 300);
+  // Live search uses only the free text; typed filters (role:…) become chips on Enter.
+  const debounced = useDebounced(freeText(searchText).trim(), 300);
   const [page, setPage] = useState<Page<UserListItem> | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [departments, setDepartments] = useState<string[]>([]);
@@ -77,7 +77,10 @@ function UsersPageInner() {
     if (debounced !== state.search) patch({ search: debounced, page: '1' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced]);
-  useEffect(() => setSearchText(state.search), [state.search]);
+  // Only when the URL really differs (Back button) — never wipe a filter being typed.
+  useEffect(() => {
+    setSearchText((t) => (freeText(t).trim() === state.search ? t : state.search));
+  }, [state.search]);
 
   const filters: UserFilterState = {
     status: state.status,
@@ -274,25 +277,14 @@ function UsersPageInner() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            placeholder="Search by name, email, username, department or role…"
-            className={clsx(inputClass, 'py-2.5 pr-9 pl-9')}
-            aria-label="Search users"
-          />
-          {searchText && (
-            <button
-              onClick={() => setSearchText('')}
-              className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700"
-              aria-label="Clear search"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
+        <SmartSearch
+          value={searchText}
+          onChange={setSearchText}
+          onFilter={setFilters}
+          filters={filters}
+          roles={roles}
+          departments={departments}
+        />
         <button
           className={clsx(btnSecondary, 'relative')}
           onClick={() =>

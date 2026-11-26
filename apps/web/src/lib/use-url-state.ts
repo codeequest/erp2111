@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 type UrlValue = string | string[];
@@ -33,8 +33,16 @@ export function useUrlState<T extends Record<string, UrlValue>>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // Latest state we asked for: several patches in one tick must build on each other,
+  // not all start from the last rendered URL (router.replace is asynchronous).
+  const latest = useRef<Record<string, UrlValue>>(state);
+  useEffect(() => {
+    latest.current = state;
+  }, [state]);
+
   const write = useCallback(
     (next: Record<string, UrlValue>) => {
+      latest.current = next;
       const sp = new URLSearchParams();
       for (const [k, v] of Object.entries(next)) {
         const def = defaults[k];
@@ -51,8 +59,8 @@ export function useUrlState<T extends Record<string, UrlValue>>(
   );
 
   const patch = useCallback(
-    (p: Partial<T>) => write({ ...state, ...p } as Record<string, UrlValue>),
-    [state, write],
+    (p: Partial<T>) => write({ ...latest.current, ...p } as Record<string, UrlValue>),
+    [write],
   );
   const reset = useCallback(() => write({ ...defaults }), [defaults, write]);
 
