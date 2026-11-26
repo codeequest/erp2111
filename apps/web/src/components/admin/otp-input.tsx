@@ -30,7 +30,11 @@ export function OtpInput({
   };
 
   return (
-    <div className={clsx('flex justify-center gap-2', invalid && 'animate-shake')} role="group" aria-label="6-digit code">
+    <div
+      className={clsx('flex justify-center gap-2', invalid && 'animate-shake')}
+      role="group"
+      aria-label="6-digit code"
+    >
       {digits.map((d, i) => (
         <input
           key={i}

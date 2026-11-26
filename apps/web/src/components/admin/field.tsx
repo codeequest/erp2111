@@ -22,7 +22,12 @@ export function Field({
   error?: string | null;
   required?: boolean;
   optional?: boolean;
-  children: React.ReactElement<{ id?: string; 'aria-invalid'?: boolean; 'aria-describedby'?: string; className?: string }>;
+  children: React.ReactElement<{
+    id?: string;
+    'aria-invalid'?: boolean;
+    'aria-describedby'?: string;
+    className?: string;
+  }>;
   className?: string;
 }) {
   const id = useId();
@@ -54,7 +59,10 @@ export function Field({
         {control}
       </div>
       {error ? (
-        <p id={`${id}-msg`} className="animate-fade-in flex items-center gap-1.5 text-xs text-rose-600">
+        <p
+          id={`${id}-msg`}
+          className="animate-fade-in flex items-center gap-1.5 text-xs text-rose-600"
+        >
           <AlertCircle className="size-3.5 shrink-0" />
           {error}
         </p>

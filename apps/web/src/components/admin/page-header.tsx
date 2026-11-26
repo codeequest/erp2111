@@ -8,7 +8,10 @@ export interface Crumb {
 
 export function Breadcrumbs({ trail }: { trail: Crumb[] }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex flex-wrap items-center gap-1 text-xs text-slate-500"
+    >
       <Link href="/dashboard" className="transition hover:text-slate-800">
         Home
       </Link>
@@ -55,7 +58,9 @@ export function PageHeader({
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-900">
+              {title}
+            </h1>
             {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
           </div>
         </div>

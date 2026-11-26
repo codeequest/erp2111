@@ -89,7 +89,9 @@ export function ConfirmDialog({
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-slate-700">
                 {reason.label}
-                {!reason.required && <span className="font-normal text-slate-400"> (optional)</span>}
+                {!reason.required && (
+                  <span className="font-normal text-slate-400"> (optional)</span>
+                )}
               </span>
               <textarea
                 rows={3}
@@ -104,8 +106,8 @@ export function ConfirmDialog({
           {typeToConfirm && (
             <label className="block space-y-1.5">
               <span className="text-sm text-slate-600">
-                Type <span className="font-mono font-semibold text-slate-900">{typeToConfirm}</span> to
-                confirm
+                Type <span className="font-mono font-semibold text-slate-900">{typeToConfirm}</span>{' '}
+                to confirm
               </span>
               <input
                 value={typed}

@@ -100,7 +100,10 @@ export function NewPasswordFields({
   const s = strength(value, hints.minLength);
   const rules = [
     { ok: value.length >= hints.minLength, label: `At least ${hints.minLength} characters` },
-    { ok: value.length > 0 && value.length <= hints.maxLength, label: `At most ${hints.maxLength} characters` },
+    {
+      ok: value.length > 0 && value.length <= hints.maxLength,
+      label: `At most ${hints.maxLength} characters`,
+    },
     { ok: confirm.length > 0 && confirm === value, label: 'Both passwords match' },
   ];
 
@@ -108,7 +111,12 @@ export function NewPasswordFields({
     <div className="space-y-4">
       <div className="space-y-1.5">
         <label className="block text-sm font-medium text-slate-700">New password</label>
-        <PasswordInput value={value} onChange={onChange} autoFocus={autoFocus} invalid={serverErrors.length > 0} />
+        <PasswordInput
+          value={value}
+          onChange={onChange}
+          autoFocus={autoFocus}
+          invalid={serverErrors.length > 0}
+        />
         <div className="flex items-center gap-2 pt-1">
           <div className="flex flex-1 gap-1">
             {[0, 1, 2, 3].map((i) => (
@@ -130,14 +138,24 @@ export function NewPasswordFields({
       </div>
       <ul className="space-y-1">
         {rules.map((r) => (
-          <li key={r.label} className={clsx('flex items-center gap-2 text-xs transition', r.ok ? 'text-emerald-700' : 'text-slate-500')}>
+          <li
+            key={r.label}
+            className={clsx(
+              'flex items-center gap-2 text-xs transition',
+              r.ok ? 'text-emerald-700' : 'text-slate-500',
+            )}
+          >
             <span
               className={clsx(
                 'grid size-4 place-items-center rounded-full transition',
                 r.ok ? 'bg-emerald-100' : 'bg-slate-100',
               )}
             >
-              {r.ok ? <Check className="animate-pop size-3" /> : <span className="size-1 rounded-full bg-slate-400" />}
+              {r.ok ? (
+                <Check className="animate-pop size-3" />
+              ) : (
+                <span className="size-1 rounded-full bg-slate-400" />
+              )}
             </span>
             {r.label}
           </li>

@@ -5,10 +5,22 @@ import type { LucideIcon } from 'lucide-react';
 import { useCountUp } from '@/lib/use-count-up';
 
 const TONES = {
-  indigo: { icon: 'from-indigo-500 to-violet-500', ring: 'ring-indigo-500', glow: 'from-indigo-500/10' },
-  emerald: { icon: 'from-emerald-500 to-teal-500', ring: 'ring-emerald-500', glow: 'from-emerald-500/10' },
+  indigo: {
+    icon: 'from-indigo-500 to-violet-500',
+    ring: 'ring-indigo-500',
+    glow: 'from-indigo-500/10',
+  },
+  emerald: {
+    icon: 'from-emerald-500 to-teal-500',
+    ring: 'ring-emerald-500',
+    glow: 'from-emerald-500/10',
+  },
   sky: { icon: 'from-sky-500 to-blue-500', ring: 'ring-sky-500', glow: 'from-sky-500/10' },
-  amber: { icon: 'from-amber-500 to-orange-500', ring: 'ring-amber-500', glow: 'from-amber-500/10' },
+  amber: {
+    icon: 'from-amber-500 to-orange-500',
+    ring: 'ring-amber-500',
+    glow: 'from-amber-500/10',
+  },
   rose: { icon: 'from-rose-500 to-pink-500', ring: 'ring-rose-500', glow: 'from-rose-500/10' },
   slate: { icon: 'from-slate-500 to-slate-700', ring: 'ring-slate-500', glow: 'from-slate-500/10' },
 } as const;
@@ -47,7 +59,9 @@ export function StatCard({
       />
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-xs font-medium tracking-wide text-slate-500 uppercase">{label}</p>
+          <p className="truncate text-xs font-medium tracking-wide text-slate-500 uppercase">
+            {label}
+          </p>
           <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">
             {loading ? (
               <span className="shimmer inline-block h-7 w-12 rounded-md align-middle" />

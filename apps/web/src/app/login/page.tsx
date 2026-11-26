@@ -1,18 +1,34 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Loader2, LogIn } from 'lucide-react';
+import clsx from 'clsx';
+import { ArrowLeft, Loader2, LogIn } from 'lucide-react';
+import type { LoginResult } from '@erp/shared';
 import { useAuth } from '@/lib/auth';
+import { errorMessage } from '@/lib/api';
+import { btnPrimary, inputClass } from '@/components/admin/buttons';
+import { PasswordInput } from '@/components/admin/password-field';
+import { AuthError, AuthShell } from '@/components/auth/auth-shell';
+import { CHALLENGE_COPY, ChallengeSteps } from '@/components/auth/challenge-steps';
 
-function LoginForm() {
-  const { status, login } = useAuth();
+type Challenge = Extract<LoginResult, { kind: 'challenge' }>;
+
+/** Only same-site paths, so ?next= can't send people elsewhere. */
+function safeNext(raw: string | null): string {
+  return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+}
+
+function LoginFlow() {
+  const { status, login, completeChallenge } = useAuth();
   const router = useRouter();
-  const next = useSearchParams().get('next') || '/dashboard';
+  const next = safeNext(useSearchParams().get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
 
   useEffect(() => {
     if (status === 'authenticated') router.replace(next);
@@ -23,89 +39,98 @@ function LoginForm() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      const result = await login(email, password);
+      if (result.kind === 'challenge') {
+        setChallenge(result);
+        setPassword('');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(errorMessage(err, 'Sign-in failed. Please try again.'));
     } finally {
       setSubmitting(false);
     }
   }
 
+  if (challenge) {
+    const copy = CHALLENGE_COPY[challenge.challenge];
+    return (
+      <AuthShell title={copy.title} subtitle={copy.subtitle} wide={challenge.challenge !== 'mfa'}>
+        <div key={challenge.challenge} className="animate-fade-up">
+          <ChallengeSteps
+            challenge={challenge}
+            onChallenge={setChallenge}
+            onSession={completeChallenge}
+            onRestart={(message) => {
+              setChallenge(null);
+              setError(message);
+            }}
+          />
+        </div>
+        <button
+          onClick={() => setChallenge(null)}
+          className="mt-6 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft className="size-4" />
+          Use a different account
+        </button>
+      </AuthShell>
+    );
+  }
+
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-700">
-          Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-        />
-      </div>
-      <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-        />
-      </div>
-      {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-      >
-        {submitting ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
-        Sign in
-      </button>
-    </form>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in with the account your administrator gave you."
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+              Password
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+          />
+        </div>
+        <AuthError message={error} />
+        <button type="submit" disabled={submitting} className={clsx(btnPrimary, 'w-full py-2.5')}>
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+          Sign in
+        </button>
+      </form>
+    </AuthShell>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="hidden flex-col justify-between bg-slate-900 p-10 text-white lg:flex">
-        <div className="flex items-center gap-2">
-          <div className="grid size-9 place-items-center rounded-lg bg-blue-600 font-bold">E</div>
-          <span className="text-xl font-semibold">ERP</span>
-        </div>
-        <div>
-          <h1 className="text-3xl font-semibold">Run the whole trading cycle in one place.</h1>
-          <p className="mt-3 max-w-md text-slate-400">
-            Purchasing, inventory, sales and invoicing — with access controlled per module and role.
-          </p>
-        </div>
-        <p className="text-sm text-slate-500">v0.1.0</p>
-      </div>
-
-      <div className="flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-semibold text-slate-900">Sign in</h2>
-          <p className="mt-1 mb-6 text-sm text-slate-500">
-            Use the account your administrator gave you.
-          </p>
-          <Suspense>
-            <LoginForm />
-          </Suspense>
-        </div>
-      </div>
-    </div>
+    <Suspense>
+      <LoginFlow />
+    </Suspense>
   );
 }

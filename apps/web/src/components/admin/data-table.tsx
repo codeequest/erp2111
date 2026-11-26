@@ -76,7 +76,9 @@ export function SortTh<K extends string>({
         aria-label={`Sort by ${label}`}
       >
         {label}
-        <Icon className={clsx('size-3 transition', !active && 'opacity-0 group-hover:opacity-60')} />
+        <Icon
+          className={clsx('size-3 transition', !active && 'opacity-0 group-hover:opacity-60')}
+        />
       </button>
     </Th>
   );

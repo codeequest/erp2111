@@ -26,7 +26,12 @@ export function EmptyState({
 }) {
   const halo = HALOS[tone];
   return (
-    <div className={clsx('animate-fade-up flex flex-col items-center px-6 py-14 text-center', className)}>
+    <div
+      className={clsx(
+        'animate-fade-up flex flex-col items-center px-6 py-14 text-center',
+        className,
+      )}
+    >
       <div className="relative mb-4">
         <div
           className={clsx(

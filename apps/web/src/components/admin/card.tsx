@@ -30,12 +30,19 @@ export function Card({
     slate: 'from-slate-50 to-slate-200 text-slate-600',
   }[tone];
   return (
-    <section className={clsx('rounded-xl border border-slate-200/80 bg-white shadow-sm', className)}>
+    <section
+      className={clsx('rounded-xl border border-slate-200/80 bg-white shadow-sm', className)}
+    >
       {(title || actions) && (
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             {Icon && (
-              <div className={clsx('grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br', tile)}>
+              <div
+                className={clsx(
+                  'grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br',
+                  tile,
+                )}
+              >
                 <Icon className="size-4" />
               </div>
             )}

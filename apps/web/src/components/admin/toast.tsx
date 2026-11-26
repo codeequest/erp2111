@@ -76,7 +76,9 @@ function Toast({ item, onClose }: { item: ToastItem; onClose: () => void }) {
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="text-sm font-medium text-slate-900">{item.title}</p>
-          {item.description && <div className="mt-0.5 text-sm text-slate-500">{item.description}</div>}
+          {item.description && (
+            <div className="mt-0.5 text-sm text-slate-500">{item.description}</div>
+          )}
           <div className="mt-1 flex gap-3">
             {item.details && (
               <button
@@ -99,9 +101,17 @@ function Toast({ item, onClose }: { item: ToastItem; onClose: () => void }) {
               </button>
             )}
           </div>
-          {open && <div className="animate-fade-in mt-2 max-h-48 overflow-y-auto text-xs">{item.details}</div>}
+          {open && (
+            <div className="animate-fade-in mt-2 max-h-48 overflow-y-auto text-xs">
+              {item.details}
+            </div>
+          )}
         </div>
-        <button onClick={onClose} className="self-start rounded p-1 text-slate-400 hover:text-slate-600" aria-label="Dismiss">
+        <button
+          onClick={onClose}
+          className="self-start rounded p-1 text-slate-400 hover:text-slate-600"
+          aria-label="Dismiss"
+        >
           <X className="size-4" />
         </button>
       </div>
@@ -115,9 +125,12 @@ export function useToast() {
   return useMemo(
     () => ({
       show: push,
-      success: (title: string, description?: React.ReactNode) => push({ tone: 'success', title, description }),
-      error: (title: string, description?: React.ReactNode) => push({ tone: 'error', title, description }),
-      info: (title: string, description?: React.ReactNode) => push({ tone: 'info', title, description }),
+      success: (title: string, description?: React.ReactNode) =>
+        push({ tone: 'success', title, description }),
+      error: (title: string, description?: React.ReactNode) =>
+        push({ tone: 'error', title, description }),
+      info: (title: string, description?: React.ReactNode) =>
+        push({ tone: 'info', title, description }),
     }),
     [push],
   );
