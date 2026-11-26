@@ -154,7 +154,26 @@ export interface RoleListItem {
 
 export interface RoleDetail extends RoleListItem {
   permissions: string[];
-  users: { id: string; fullName: string; email: string }[];
+  users: {
+    id: string;
+    fullName: string;
+    email: string;
+    status: UserStatus;
+    /** Temporary assignment end, or null. */
+    expiresAt: string | null;
+  }[];
+}
+
+export interface RoleCompare {
+  roles: RoleRef[];
+  rows: {
+    code: string;
+    label: string;
+    module: ErpModuleKey;
+    sensitive: boolean;
+    /** One entry per role, same order as `roles`. */
+    held: boolean[];
+  }[];
 }
 
 export interface RoleInput {
