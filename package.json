@@ -14,6 +14,7 @@
     "build": "pnpm --filter @erp/shared build && pnpm --filter @erp/api build && pnpm --filter @erp/web build",
     "typecheck": "pnpm --filter @erp/shared build && pnpm -r typecheck",
     "test": "pnpm --filter @erp/shared build && pnpm --filter @erp/api test",
+    "test:e2e": "pnpm --filter @erp/shared build && pnpm --filter @erp/api test:e2e",
     "format": "prettier --write .",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",

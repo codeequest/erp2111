@@ -42,12 +42,21 @@ describe('shared permission model', () => {
 
   it('lists the exact codes each legacy admin code expands to', () => {
     expect(new Set(LEGACY_PERMISSION_MAP['admin.users.manage'])).toEqual(
-      new Set([...ALL_PERMISSIONS.filter((p) => p.startsWith('admin.user.')), 'admin.session.revoke']),
+      new Set([
+        ...ALL_PERMISSIONS.filter((p) => p.startsWith('admin.user.')),
+        'admin.session.revoke',
+      ]),
     );
     expect(new Set(LEGACY_PERMISSION_MAP['admin.roles.manage'])).toEqual(
-      new Set([...ALL_PERMISSIONS.filter((p) => p.startsWith('admin.role.')), 'admin.permission.manage']),
+      new Set([
+        ...ALL_PERMISSIONS.filter((p) => p.startsWith('admin.role.')),
+        'admin.permission.manage',
+      ]),
     );
-    expect(LEGACY_PERMISSION_MAP['admin.audit.read']).toEqual(['admin.audit.read', 'admin.security.view']);
+    expect(LEGACY_PERMISSION_MAP['admin.audit.read']).toEqual([
+      'admin.audit.read',
+      'admin.security.view',
+    ]);
   });
 
   it('keeps business permissions non-sensitive so only Admin is privileged', () => {
