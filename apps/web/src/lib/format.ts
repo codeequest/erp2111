@@ -18,7 +18,8 @@ export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+// English, like the rest of the UI (the browser locale would mix languages).
+const RTF = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['year', 365 * 24 * 3600],
   ['month', 30 * 24 * 3600],
