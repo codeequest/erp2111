@@ -17,6 +17,8 @@ export interface ConfirmDialogProps {
   /** The user must type this exact text to enable the button. */
   typeToConfirm?: string;
   busy?: boolean;
+  /** Keeps the confirm button disabled (e.g. a required choice is missing). */
+  confirmDisabled?: boolean;
   /** Extra content between the description and the inputs. */
   children?: React.ReactNode;
   onConfirm: (reason?: string) => void;
@@ -32,6 +34,7 @@ export function ConfirmDialog({
   reason,
   typeToConfirm,
   busy = false,
+  confirmDisabled = false,
   children,
   onConfirm,
   onClose,
@@ -73,7 +76,7 @@ export function ConfirmDialog({
           </button>
           <button
             className={danger ? btnDanger : btnPrimary}
-            disabled={busy || !reasonOk || !typedOk}
+            disabled={busy || confirmDisabled || !reasonOk || !typedOk}
             onClick={() => onConfirm(reason ? text.trim() || undefined : undefined)}
           >
             {busy && <Loader2 className="size-4 animate-spin" />}

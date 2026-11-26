@@ -151,7 +151,9 @@ export function AuditTimeline({ entries }: { entries: AuditEntryDto[] }) {
                     <span className="font-medium">Reason:</span> {e.reason}
                   </p>
                 )}
-                {(e.before != null || e.after != null) && <AuditDiff before={e.before} after={e.after} />}
+                {(e.before != null || e.after != null) && (
+                  <AuditDiff before={e.before} after={e.after} />
+                )}
                 {e.ip && <p className="text-[11px] text-slate-400">From {e.ip}</p>}
               </div>
             )}
