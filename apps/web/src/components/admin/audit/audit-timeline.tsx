@@ -48,6 +48,7 @@ function show(v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'string') return v;
   if (Array.isArray(v)) {
+    if (v.length === 0) return '—';
     return v
       .map((x) =>
         x && typeof x === 'object' && 'name' in x ? String((x as { name: unknown }).name) : show(x),

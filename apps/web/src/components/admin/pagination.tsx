@@ -21,6 +21,7 @@ export function Pagination({
   noun?: string;
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  const word = total === 1 ? noun.replace(/s$/, '') : noun;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
 
@@ -40,7 +41,7 @@ export function Pagination({
           <>
             <span className="font-medium text-slate-900">{from}</span>–
             <span className="font-medium text-slate-900">{to}</span> of{' '}
-            <span className="font-medium text-slate-900">{total.toLocaleString()}</span> {noun}
+            <span className="font-medium text-slate-900">{total.toLocaleString()}</span> {word}
           </>
         )}
       </p>
