@@ -32,7 +32,7 @@ const STATUS: Record<DisplayStatus, { label: string; cls: string; dot: string }>
 };
 
 const pill =
-  'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset';
+  'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset';
 
 export function UserStatusBadge({ status }: { status: DisplayStatus }) {
   const s = STATUS[status];

@@ -83,7 +83,7 @@ export function StatCard({
     </>
   );
   const cls = clsx(
-    'group relative overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-sm',
+    'group relative h-full w-full overflow-hidden rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-sm',
     onClick && 'lift cursor-pointer',
     active && clsx('ring-2', t.ring),
   );
