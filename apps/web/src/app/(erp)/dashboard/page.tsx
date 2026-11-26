@@ -97,6 +97,20 @@ export default function DashboardPage() {
 
   const showLowStock = can('inventory.stock.read') && can('dashboard.summary.view');
   const [lowStock, setLowStock] = useState<LowStockSummary | null>(null);
+
+  // Server and browser may differ in locale/timezone; render the date only after mount.
+  const [today, setToday] = useState('');
+  useEffect(() => {
+    setToday(
+      new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }),
+    );
+  }, []);
+
   useEffect(() => {
     if (!showLowStock) return;
     api<LowStockSummary>('/dashboard/low-stock')
@@ -108,14 +122,7 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-7xl space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Welcome back, {firstName}</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {new Date().toLocaleDateString(undefined, {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })}
-        </p>
+        <p className="mt-1 h-5 text-sm text-slate-500">{today}</p>
       </div>
 
       {kpis.length > 0 && (
