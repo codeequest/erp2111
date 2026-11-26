@@ -6,6 +6,7 @@ const FIELD_LABELS: Record<string, string> = {
   barcode: 'barcode',
   code: 'code',
   name: 'name',
+  rne: 'RNE',
 };
 
 /**

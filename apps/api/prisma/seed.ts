@@ -5,6 +5,7 @@
  *  - default roles and their permissions (Admin always gets every permission)
  *  - the first admin user (SEED_ADMIN_* env vars)
  *  - company settings, a base unit, a main warehouse, document numbering
+ *  - the Tunisian VAT rates
  */
 import { DocumentType, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -118,11 +119,36 @@ async function seedReferenceData() {
   console.log('✔ company settings, unit PCS, warehouse MAIN, document sequences');
 }
 
+/**
+ * Tunisian VAT (TVA) rates. Created once and never overwritten, so an admin can
+ * rename or deactivate them in Settings (e.g. when a finance law changes a rate).
+ *  - 19 %: standard rate
+ *  - 13 %: intermediate rate
+ *  -  7 %: reduced rate
+ *  -  0 %: exempt operations (exonéré), and sales under VAT suspension (suspension,
+ *          e.g. totally exporting companies) — two entries so documents say which.
+ */
+const TUNISIA_VAT_RATES = [
+  { name: 'TVA 19 %', rate: '19' },
+  { name: 'TVA 13 %', rate: '13' },
+  { name: 'TVA 7 %', rate: '7' },
+  { name: 'Exonéré (0 %)', rate: '0' },
+  { name: 'Suspension de TVA (0 %)', rate: '0' },
+];
+
+async function seedTaxRates() {
+  for (const t of TUNISIA_VAT_RATES) {
+    await prisma.taxRate.upsert({ where: { name: t.name }, update: {}, create: t });
+  }
+  console.log(`✔ ${TUNISIA_VAT_RATES.length} Tunisian VAT rates`);
+}
+
 async function main() {
   await seedPermissions();
   await seedRoles();
   await seedAdmin();
   await seedReferenceData();
+  await seedTaxRates();
 }
 
 main()

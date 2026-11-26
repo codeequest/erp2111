@@ -205,6 +205,7 @@ model TaxRate {
   createdAt DateTime @default(now()) @map("created_at")
 
   products        Product[]
+  suppliers       Supplier[]
   companyDefaults CompanySettings[]
   invoiceLines    InvoiceLine[]
 
@@ -422,12 +423,17 @@ model Supplier {
   phone           String?
   address         String?
   taxId           String?  @map("tax_id")
+  /// Tunisian trade register identifier (RNE "identifiant unique"), e.g. 1234567A
+  rne             String?  @unique
+  /// VAT rate applied to this supplier's purchases; null = each product's own rate
+  taxRateId       String?  @map("tax_rate_id") @db.Uuid
   paymentTermDays Int      @default(0) @map("payment_term_days")
   notes           String?
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  taxRate        TaxRate?        @relation(fields: [taxRateId], references: [id])
   purchaseOrders PurchaseOrder[]
   invoices       Invoice[]
   payments       Payment[]
@@ -488,10 +494,10 @@ model PurchaseOrder {
   orderDate     DateTime            @default(now()) @map("order_date") @db.Date
   expectedDate  DateTime?           @map("expected_date") @db.Date
   notes         String?
-  subtotal      Decimal             @default(0) @db.Decimal(18, 2)
-  discountTotal Decimal             @default(0) @map("discount_total") @db.Decimal(18, 2)
-  taxTotal      Decimal             @default(0) @map("tax_total") @db.Decimal(18, 2)
-  total         Decimal             @default(0) @db.Decimal(18, 2)
+  subtotal      Decimal             @default(0) @db.Decimal(18, 3)
+  discountTotal Decimal             @default(0) @map("discount_total") @db.Decimal(18, 3)
+  taxTotal      Decimal             @default(0) @map("tax_total") @db.Decimal(18, 3)
+  total         Decimal             @default(0) @db.Decimal(18, 3)
   confirmedAt   DateTime?           @map("confirmed_at")
   createdById   String              @map("created_by_id") @db.Uuid
   createdAt     DateTime            @default(now()) @map("created_at")
@@ -524,7 +530,7 @@ model PurchaseOrderLine {
   discountPct     Decimal @default(0) @map("discount_pct") @db.Decimal(5, 2)
   /// Tax % copied at order time
   taxRate         Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
-  lineTotal       Decimal @default(0) @map("line_total") @db.Decimal(18, 2)
+  lineTotal       Decimal @default(0) @map("line_total") @db.Decimal(18, 3)
   /// In line units
   receivedQty     Decimal @default(0) @map("received_qty") @db.Decimal(18, 4)
 
@@ -538,14 +544,19 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
-  id              String   @id @default(uuid()) @db.Uuid
-  number          String   @unique
-  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
-  warehouseId     String   @map("warehouse_id") @db.Uuid
-  receivedAt      DateTime @default(now()) @map("received_at")
-  notes           String?
-  createdById     String   @map("created_by_id") @db.Uuid
-  createdAt       DateTime @default(now()) @map("created_at")
+  id                    String    @id @default(uuid()) @db.Uuid
+  number                String    @unique
+  purchaseOrderId       String    @map("purchase_order_id") @db.Uuid
+  warehouseId           String    @map("warehouse_id") @db.Uuid
+  receivedAt            DateTime  @default(now()) @map("received_at")
+  /// The supplier's delivery note number (bon de livraison), as printed on their document
+  supplierRef           String?   @map("supplier_ref")
+  /// The supplier's invoice, when it came with the goods (matched later by the supplier bill)
+  supplierInvoiceNumber String?   @map("supplier_invoice_number")
+  supplierInvoiceDate   DateTime? @map("supplier_invoice_date") @db.Date
+  notes                 String?
+  createdById           String    @map("created_by_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at")
 
   purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id])
   warehouse     Warehouse          @relation(fields: [warehouseId], references: [id])
@@ -553,6 +564,7 @@ model GoodsReceipt {
   lines         GoodsReceiptLine[]
 
   @@index([purchaseOrderId])
+  @@index([receivedAt])
   @@map("goods_receipts")
 }
 
@@ -563,6 +575,12 @@ model GoodsReceiptLine {
   productId           String  @map("product_id") @db.Uuid
   /// In the PO line's unit
   quantity            Decimal @db.Decimal(18, 4)
+  /// quantity × PO unit factor: what entered the stock
+  baseQuantity        Decimal @default(0) @map("base_quantity") @db.Decimal(18, 4)
+  /// Cost per base unit: PO price after discount, before VAT (used for the average cost)
+  unitCost            Decimal @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  /// quantity × PO price after discount, before VAT, to the millime
+  value               Decimal @default(0) @db.Decimal(18, 3)
 
   goodsReceipt      GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
   purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])

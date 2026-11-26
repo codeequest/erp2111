@@ -5,11 +5,14 @@ import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import { NAVIGATION } from '@erp/shared';
 import { useAuth } from '@/lib/auth';
+import { useI18n } from '@/lib/i18n';
+import type { MessageKey } from '@/lib/messages';
 import { ITEM_ICONS, MODULE_COLORS } from './icons';
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { can } = useAuth();
+  const { t, has } = useI18n();
 
   return (
     <nav className="flex h-full flex-col bg-slate-900 text-slate-300">
@@ -30,7 +33,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               {module.key !== 'dashboard' && (
                 <p className="mb-1 flex items-center gap-2 px-2 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
                   <span className={clsx('size-1.5 rounded-full', color.bg)} />
-                  {module.label}
+                  {has(`nav.module.${module.key}`)
+                    ? t(`nav.module.${module.key}` as MessageKey)
+                    : module.label}
                 </p>
               )}
               <ul className="space-y-0.5">
@@ -50,7 +55,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                         )}
                       >
                         {Icon && <Icon className={clsx('size-4', active && color.text)} />}
-                        {item.label}
+                        {has(`nav.item.${item.key}`)
+                          ? t(`nav.item.${item.key}` as MessageKey)
+                          : item.label}
                       </Link>
                     </li>
                   );
