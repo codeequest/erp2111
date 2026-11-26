@@ -122,36 +122,39 @@ export function UserFilters({
         </div>
       </Section>
 
-      <Section title="Roles">
-        {roles === null ? (
-          <p className="text-xs text-slate-400">Loading…</p>
-        ) : (
-          <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-            {roles.map((r) => {
-              const on = value.roleIds.includes(r.id);
-              return (
-                <label
-                  key={r.id}
-                  className={clsx(
-                    'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition',
-                    on ? 'bg-indigo-50' : 'hover:bg-slate-50',
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    onChange={() => onChange({ roleIds: toggle(value.roleIds, r.id) })}
-                    className="size-4 accent-indigo-600"
-                  />
-                  <span className={clsx('size-2 rounded-full', roleColor(r.color).dot)} />
-                  <span className="min-w-0 flex-1 truncate text-slate-700">{r.name}</span>
-                  <span className="text-xs text-slate-400 tabular-nums">{r.userCount}</span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-      </Section>
+      {/* Hidden when roles can't be listed (no admin.role.view). */}
+      {(roles === null || roles.length > 0) && (
+        <Section title="Roles">
+          {roles === null ? (
+            <p className="text-xs text-slate-400">Loading…</p>
+          ) : (
+            <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
+              {roles.map((r) => {
+                const on = value.roleIds.includes(r.id);
+                return (
+                  <label
+                    key={r.id}
+                    className={clsx(
+                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition',
+                      on ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => onChange({ roleIds: toggle(value.roleIds, r.id) })}
+                      className="size-4 accent-indigo-600"
+                    />
+                    <span className={clsx('size-2 rounded-full', roleColor(r.color).dot)} />
+                    <span className="min-w-0 flex-1 truncate text-slate-700">{r.name}</span>
+                    <span className="text-xs text-slate-400 tabular-nums">{r.userCount}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+      )}
 
       <Section title="Two-step verification">
         <Segmented

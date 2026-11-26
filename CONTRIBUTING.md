@@ -22,6 +22,13 @@ Next.js then uses your page instead of the placeholder. Call the API with `api()
 - **Money and quantities are `Decimal`**, never `number`/`Float` in the database.
 - **Stock is never edited directly.** Write a `StockMove` row and update `StockBalance` in the **same** `prisma.$transaction`.
 - **Posted invoices / confirmed documents are immutable.** Correct them with a credit note, a return or a cancellation.
-- **Every endpoint has a permission.** New permission? Add it to `packages/shared/src/permissions.ts`, give it to roles in `roles.ts`, run `pnpm db:seed`.
+- **Every endpoint has a permission.** New permission? Add it to `PERMISSION_DEFINITIONS` in `packages/shared/src/permissions.ts` with:
+  - `code` — `module.resource.action`, lower case (`^[a-z]+\.[a-z]+\.[a-z_]+$`)
+  - `label` — short, human (“Deactivate users”) and `description` — one sentence for the role editor
+  - `resource` / `action` / `module` — used to group it in the matrix
+  - `sensitive: true` only if it grants administration power (holders become *privileged* and need MFA)
+  Then give it to the default roles in `roles.ts` and run `pnpm db:seed`. Admins can grant it to custom roles in the matrix.
+- **Admin writes go through the policy rules** in `apps/api/src/core/iam/access-policy.ts` (no escalation, no self-lockout, last admin) and record `recordAudit(tx, …)` inside the same transaction.
+- **Never log, return or audit** a password, token, TOTP secret or recovery code.
 - **Write an `AuditLog` row** for every create / update / status change of a business document.
 - Never commit `.env` files.
