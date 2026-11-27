@@ -144,6 +144,14 @@ export default function ProductDetailPage() {
         {product.averageCost !== undefined && (
           <Stat label="Average cost" value={formatMoney(product.averageCost)} />
         )}
+        {product.lastPurchaseCost !== undefined && (
+          <Stat
+            label="Last purchase price"
+            value={
+              Number(product.lastPurchaseCost) > 0 ? formatMoney(product.lastPurchaseCost) : '—'
+            }
+          />
+        )}
         <Stat
           label="On hand"
           value={`${formatQty(product.stockOnHand)} ${product.baseUnit.code}`}

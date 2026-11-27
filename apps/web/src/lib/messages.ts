@@ -1,3 +1,5 @@
+import { invoicingEn, invoicingFr } from './messages-invoicing';
+
 /**
  * UI texts, English and French. Keys are flat ("area.thing"); `{name}` is replaced
  * by t(key, { name }). `fr` must define every key of `en` (checked by TypeScript).
@@ -431,7 +433,8 @@ export const en = {
   'grp.by': 'Received by',
   'grp.notes': 'Notes',
   'grp.locked':
-    'A receipt is final and cannot be changed. Goods sent back to the supplier will go through a supplier return (a later step).',
+    'A posted receipt cannot be changed. Until it is billed it can be cancelled (reversing stock moves); goods sent back later will go through a supplier return.',
+  ...invoicingEn,
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -864,5 +867,6 @@ export const fr: Record<MessageKey, string> = {
   'grp.by': 'Reçu par',
   'grp.notes': 'Notes',
   'grp.locked':
-    'Une réception est définitive et ne peut pas être modifiée. Les marchandises renvoyées au fournisseur passeront par un retour fournisseur (étape ultérieure).',
+    'Une réception validée ne peut plus être modifiée. Tant qu’elle n’est pas facturée, elle peut être annulée (mouvements de stock inverses) ; un renvoi ultérieur passera par un retour fournisseur.',
+  ...invoicingFr,
 };

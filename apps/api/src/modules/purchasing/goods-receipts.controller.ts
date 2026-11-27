@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   ParseUUIDPipe,
@@ -16,18 +18,22 @@ import type {
   GoodsReceiptListItem,
   GoodsReceiptSummary,
   Paginated,
+  ReceivingSettings,
 } from '@erp/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { RequestUser } from '../../common/types/request-user';
 import { XLSX_MIME } from '../../common/xlsx';
 import {
+  CancelGoodsReceiptDto,
   CreateGoodsReceiptDto,
   ExportDeliveriesQueryDto,
   ExportGoodsReceiptsQueryDto,
   ListDeliveriesQueryDto,
   ListGoodsReceiptsQueryDto,
   SetSupplierInvoiceDto,
+  UpdateGoodsReceiptDto,
+  UpdateReceivingSettingsDto,
 } from './dto/goods-receipt.dto';
 import { GoodsReceiptsService } from './goods-receipts.service';
 import { PurchasingExportService } from './purchasing-export.service';
@@ -53,6 +59,23 @@ export class GoodsReceiptsController {
   @ApiOperation({ summary: 'Receipts this month and orders waiting to be received' })
   summary(): Promise<GoodsReceiptSummary> {
     return this.receipts.summary();
+  }
+
+  @Get('settings')
+  @RequirePermissions('purchasing.order.read')
+  @ApiOperation({ summary: 'Receiving settings (over-receipt tolerance)' })
+  settings(): Promise<ReceivingSettings> {
+    return this.receipts.settings();
+  }
+
+  @Patch('settings')
+  @RequirePermissions('admin.settings.manage')
+  @ApiOperation({ summary: 'Change the over-receipt tolerance' })
+  updateSettings(
+    @Body() dto: UpdateReceivingSettingsDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<ReceivingSettings> {
+    return this.receipts.updateSettings(dto, user);
   }
 
   @Get('deliveries')
@@ -101,13 +124,58 @@ export class GoodsReceiptsController {
   @RequirePermissions('purchasing.receipt.create')
   @ApiOperation({
     summary:
-      'Receive goods against a confirmed PO (partial allowed): stock IN, average cost, PO status',
+      'Receive goods against a confirmed PO (partial allowed): posted at once (stock IN, costs, PO status), or saved as a draft with asDraft',
   })
   create(
     @Body() dto: CreateGoodsReceiptDto,
     @CurrentUser() user: RequestUser,
   ): Promise<GoodsReceiptDetail> {
     return this.receipts.create(dto, user);
+  }
+
+  @Patch(':id')
+  @RequirePermissions('purchasing.receipt.create')
+  @ApiOperation({ summary: 'Update a draft goods receipt (same order)' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGoodsReceiptDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<GoodsReceiptDetail> {
+    return this.receipts.update(id, dto, user);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermissions('purchasing.receipt.create')
+  @ApiOperation({ summary: 'Delete a draft goods receipt' })
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser): Promise<void> {
+    return this.receipts.remove(id, user);
+  }
+
+  @Post(':id/post')
+  @RequirePermissions('purchasing.receipt.create')
+  @ApiOperation({
+    summary: 'Post a draft receipt: number, stock IN, average and last purchase cost, PO status',
+  })
+  post(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<GoodsReceiptDetail> {
+    return this.receipts.post(id, user);
+  }
+
+  @Post(':id/cancel')
+  @RequirePermissions('purchasing.receipt.cancel')
+  @ApiOperation({
+    summary:
+      'Cancel a posted receipt: reversing stock moves, PO quantities back (refused once billed)',
+  })
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelGoodsReceiptDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<GoodsReceiptDetail> {
+    return this.receipts.cancel(id, dto, user);
   }
 
   @Patch(':id/invoice')

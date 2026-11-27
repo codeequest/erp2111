@@ -138,3 +138,41 @@ export function statusAfterReceipt(
     ? 'RECEIVED'
     : 'PARTIALLY_RECEIVED';
 }
+
+/**
+ * Most that can still be received on an order line: what is left, plus the
+ * over-receipt tolerance of the company settings (a % of the ordered quantity).
+ */
+export function receivableLimit(ordered: Num, received: Num, tolerancePct: Num): Prisma.Decimal {
+  const extra = D(ordered).mul(D(tolerancePct)).div(100);
+  const limit = D(ordered).plus(extra).minus(D(received));
+  return limit.isNegative() ? D(0) : limit.toDecimalPlaces(COST_DECIMALS);
+}
+
+/**
+ * Weighted average cost once a receipt is cancelled: the inverse of weightedAverageCost.
+ *   (stock × average − quantity out × its cost) / (stock − quantity out)
+ * When no stock is left (or the result would be negative) the average is kept.
+ */
+export function averageCostAfterReversal(
+  onHand: Num,
+  currentAverage: Num,
+  quantityOut: Num,
+  unitCostOut: Num,
+): Prisma.Decimal {
+  const left = D(onHand).minus(D(quantityOut));
+  if (left.lte(0)) return D(currentAverage);
+  const value = D(onHand)
+    .mul(D(currentAverage))
+    .minus(D(quantityOut).mul(D(unitCostOut)));
+  if (value.isNegative()) return D(currentAverage);
+  return cost(value.div(left));
+}
+
+/** Order status once a posted receipt is cancelled (received quantities already reduced). */
+export function statusAfterCancelledReceipt(
+  lines: { quantity: Num; receivedQty: Num }[],
+): 'CONFIRMED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' {
+  if (lines.every((l) => D(l.receivedQty).lte(0))) return 'CONFIRMED';
+  return statusAfterReceipt(lines);
+}

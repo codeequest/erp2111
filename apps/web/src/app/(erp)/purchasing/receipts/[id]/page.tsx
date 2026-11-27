@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  Ban,
+  Send,
+  Trash2,
+  ReceiptText,
   ClipboardList,
   FileText,
   Lock,
@@ -23,10 +27,17 @@ import { AccessDenied } from '@/components/page-header';
 import { SupplierInvoiceDialog } from '@/components/purchasing/invoice-dialog';
 import {
   ErrorBox,
+  Field,
+  Modal,
   PurchasingHero,
+  ReceiptStatusBadge,
   Spinner,
+  btnDanger,
+  btnSecondary,
   errorMessages,
+  heroButton,
   heroGhostButton,
+  inputClass,
   useSuccess,
 } from '@/components/purchasing/ui';
 
@@ -40,6 +51,43 @@ export default function GoodsReceiptPage() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const { burst, celebrate } = useSuccess();
   const canInvoice = can('purchasing.receipt.create');
+  const canCancel = can('purchasing.receipt.cancel');
+  const canBill = can('invoicing.bill.write');
+  const router = useRouter();
+  const [busy, setBusy] = useState<null | 'post' | 'delete' | 'cancel'>(null);
+  const [actionError, setActionError] = useState<string | string[] | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [reason, setReason] = useState('');
+
+  async function act(kind: 'post' | 'delete' | 'cancel') {
+    setBusy(kind);
+    setActionError(null);
+    try {
+      if (kind === 'delete') {
+        await api(`/purchasing/receipts/${id}`, { method: 'DELETE' });
+        router.push('/purchasing/receipts?view=receipts');
+        return;
+      }
+      const r = await api<GoodsReceiptDetail>(`/purchasing/receipts/${id}/${kind}`, {
+        method: 'POST',
+        ...(kind === 'cancel' && { body: JSON.stringify({ reason: reason.trim() }) }),
+      });
+      setReceipt(r);
+      setCancelOpen(false);
+      celebrate(
+        kind === 'post'
+          ? t('grf.saved', { number: r.number })
+          : t('grx.cancelled', { number: r.number }),
+      );
+    } catch (e) {
+      setActionError(errorMessages(e));
+      setCancelOpen(false);
+      setDeleteOpen(false);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     if (!canRead) return;
@@ -89,18 +137,87 @@ export default function GoodsReceiptPage() {
         icon={PackageCheck}
         title={receipt.number}
         badge={
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium text-white ring-1 ring-white/40 backdrop-blur">
-            <Lock className="size-3" /> {t('grp.final')}
-          </span>
+          receipt.status === 'POSTED' ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium text-white ring-1 ring-white/40 backdrop-blur">
+              <Lock className="size-3" /> {t('grp.final')}
+            </span>
+          ) : (
+            <ReceiptStatusBadge status={receipt.status} onHero />
+          )
         }
         subtitle={`${receipt.supplier.name} · ${money(receipt.value)} ${t('grp.ht')}`}
         crumb={[{ label: t('gr.title'), href: '/purchasing/receipts' }, { label: receipt.number }]}
         actions={
-          <Link href={`/purchasing/orders/${receipt.purchaseOrder.id}`} className={heroGhostButton}>
-            <ClipboardList className="size-4" /> {receipt.purchaseOrder.number}
-          </Link>
+          <>
+            <Link
+              href={`/purchasing/orders/${receipt.purchaseOrder.id}`}
+              className={heroGhostButton}
+            >
+              <ClipboardList className="size-4" /> {receipt.purchaseOrder.number}
+            </Link>
+            {receipt.status === 'DRAFT' && canInvoice && (
+              <>
+                <Link
+                  href={`/purchasing/receipts/new?draftId=${receipt.id}`}
+                  className={heroGhostButton}
+                >
+                  <Pencil className="size-4" /> {t('grx.edit')}
+                </Link>
+                <button
+                  className={heroGhostButton}
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={Boolean(busy)}
+                >
+                  <Trash2 className="size-4" /> {t('grx.delete')}
+                </button>
+                <button
+                  className={heroButton}
+                  onClick={() => void act('post')}
+                  disabled={Boolean(busy)}
+                >
+                  {busy === 'post' ? <Spinner /> : <Send className="size-4" />} {t('grx.post')}
+                </button>
+              </>
+            )}
+            {receipt.status === 'POSTED' && canCancel && receipt.bills.length === 0 && (
+              <button
+                className={heroGhostButton}
+                onClick={() => setCancelOpen(true)}
+                disabled={Boolean(busy)}
+              >
+                <Ban className="size-4" /> {t('grx.cancel')}
+              </button>
+            )}
+            {receipt.status === 'POSTED' && canBill && receipt.billing !== 'full' && (
+              <Link
+                href={`/invoicing/bills/new?supplierId=${receipt.supplier.id}&receiptId=${receipt.id}`}
+                className={heroButton}
+              >
+                <ReceiptText className="size-4" /> {t('grx.createBill')}
+              </Link>
+            )}
+          </>
         }
       />
+
+      {actionError && <ErrorBox message={actionError} />}
+      {receipt.status === 'CANCELLED' && (
+        <div className="animate-fade flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <Ban className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-medium">
+              {t('grx.cancelledOn', { date: dateTime(receipt.cancelledAt) })}
+            </p>
+            {receipt.cancelReason && <p className="text-red-700">{receipt.cancelReason}</p>}
+          </div>
+        </div>
+      )}
+      {receipt.status === 'DRAFT' && (
+        <div className="animate-fade flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <Pencil className="mt-0.5 size-4 shrink-0 text-slate-400" />
+          {t('grx.draftBanner')}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <section
@@ -118,6 +235,12 @@ export default function GoodsReceiptPage() {
                   <th className="px-4 py-2.5">{t('grp.col.product')}</th>
                   <th className="px-4 py-2.5 text-right">{t('grp.col.qty')}</th>
                   <th className="px-4 py-2.5 text-right">{t('grp.col.stock')}</th>
+                  <th className="hidden px-4 py-2.5 text-right md:table-cell">
+                    {t('grx.col.refused')}
+                  </th>
+                  <th className="hidden px-4 py-2.5 text-right md:table-cell">
+                    {t('grx.col.billed')}
+                  </th>
                   <th className="px-4 py-2.5 text-right">{t('grp.col.cost')}</th>
                   <th className="px-4 py-2.5 text-right">{t('grp.col.value')}</th>
                 </tr>
@@ -143,8 +266,44 @@ export default function GoodsReceiptPage() {
                       <span className="text-xs text-slate-400">{l.unit.code}</span>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
-                      <span className="font-medium text-emerald-700">+{qty(l.baseQuantity)}</span>{' '}
+                      <span
+                        className={
+                          receipt.status === 'POSTED'
+                            ? 'font-medium text-emerald-700'
+                            : 'text-slate-400 line-through decoration-slate-300'
+                        }
+                      >
+                        +{qty(l.baseQuantity)}
+                      </span>{' '}
                       <span className="text-xs text-slate-400">{l.product.baseUnitCode}</span>
+                    </td>
+                    <td className="hidden px-4 py-3 text-right whitespace-nowrap tabular-nums md:table-cell">
+                      {Number(l.rejectedQty) > 0 ? (
+                        <span title={l.rejectReason ?? undefined}>
+                          <span className="font-medium text-red-600">{qty(l.rejectedQty)}</span>{' '}
+                          <span className="text-xs text-slate-400">{l.unit.code}</span>
+                          <p className="max-w-40 truncate text-[11px] text-slate-400">
+                            {l.rejectReason}
+                          </p>
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="hidden px-4 py-3 text-right whitespace-nowrap tabular-nums md:table-cell">
+                      {Number(l.billedQty) > 0 ? (
+                        <span
+                          className={
+                            Number(l.billedQty) >= Number(l.quantity)
+                              ? 'font-medium text-indigo-700'
+                              : 'text-amber-700'
+                          }
+                        >
+                          {qty(l.billedQty)} / {qty(l.quantity)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap text-slate-600 tabular-nums">
                       {money(l.unitCost)}
@@ -161,12 +320,16 @@ export default function GoodsReceiptPage() {
           <div className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-100 bg-gradient-to-br from-slate-50 to-emerald-50/40 px-5 py-4">
             <p className="flex max-w-md items-start gap-2 text-xs text-slate-500">
               <PackageCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-              {t('grp.stockNote', {
-                stock: Object.entries(baseTotals)
-                  .map(([unit, n]) => `+${qty(n)} ${unit}`)
-                  .join(', '),
-                warehouse: receipt.warehouse.code,
-              })}
+              {receipt.status === 'POSTED'
+                ? t('grp.stockNote', {
+                    stock: Object.entries(baseTotals)
+                      .map(([unit, n]) => `+${qty(n)} ${unit}`)
+                      .join(', '),
+                    warehouse: receipt.warehouse.code,
+                  })
+                : receipt.status === 'DRAFT'
+                  ? t('grx.draftNote')
+                  : t('grx.cancelledNote')}
             </p>
             <div className="flex items-baseline gap-6">
               <span className="font-semibold text-slate-900">{t('grp.total')}</span>
@@ -237,6 +400,22 @@ export default function GoodsReceiptPage() {
                   </button>
                 )}
               </Info>
+              {receipt.bills.length > 0 && (
+                <Info icon={ReceiptText} label={t('grx.bills')}>
+                  <span className="flex flex-wrap gap-x-2">
+                    {receipt.bills.map((b) => (
+                      <Link
+                        key={b.id}
+                        href={`/invoicing/bills/${b.id}`}
+                        className="font-mono text-xs font-semibold hover:text-orange-700 hover:underline"
+                      >
+                        {b.number}
+                      </Link>
+                    ))}
+                  </span>
+                  <p className="text-xs text-slate-400">{t(`grx.billing.${receipt.billing}`)}</p>
+                </Info>
+              )}
               <Info icon={Warehouse} label={t('grp.warehouse')}>
                 {receipt.warehouse.code} · {receipt.warehouse.name}
               </Info>
@@ -261,7 +440,12 @@ export default function GoodsReceiptPage() {
             className="animate-rise flex gap-2 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 ring-1 ring-slate-200"
             style={{ animationDelay: '240ms' }}
           >
-            <Lock className="mt-0.5 size-4 shrink-0 text-slate-400" /> {t('grp.locked')}
+            <Lock className="mt-0.5 size-4 shrink-0 text-slate-400" />{' '}
+            {receipt.status === 'DRAFT'
+              ? t('grx.draftNote')
+              : receipt.status === 'CANCELLED'
+                ? t('grx.cancelledNote')
+                : t('grp.locked')}
           </p>
         </aside>
       </div>
@@ -281,6 +465,58 @@ export default function GoodsReceiptPage() {
           celebrate(t('inv.saved', { number: r.supplierInvoiceNumber ?? '' }));
         }}
       />
+      <Modal
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        title={t('grx.cancelTitle', { number: receipt.number })}
+        subtitle={t('grx.cancelText')}
+        footer={
+          <>
+            <button className={btnSecondary} onClick={() => setCancelOpen(false)}>
+              {t('common.close')}
+            </button>
+            <button
+              className={btnDanger}
+              onClick={() => void act('cancel')}
+              disabled={!reason.trim() || busy === 'cancel'}
+            >
+              {busy === 'cancel' ? <Spinner /> : <Ban className="size-4" />} {t('grx.cancel')}
+            </button>
+          </>
+        }
+      >
+        <Field label={t('grx.reason')}>
+          <input
+            autoFocus
+            value={reason}
+            maxLength={500}
+            onChange={(e) => setReason(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+      </Modal>
+      <Modal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={t('grx.deleteTitle', { number: receipt.number })}
+        subtitle={t('grx.deleteText')}
+        footer={
+          <>
+            <button className={btnSecondary} onClick={() => setDeleteOpen(false)}>
+              {t('common.close')}
+            </button>
+            <button
+              className={btnDanger}
+              onClick={() => void act('delete')}
+              disabled={busy === 'delete'}
+            >
+              {busy === 'delete' ? <Spinner /> : <Trash2 className="size-4" />} {t('grx.delete')}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">{t('grx.deleteHint')}</p>
+      </Modal>
       {burst}
     </div>
   );

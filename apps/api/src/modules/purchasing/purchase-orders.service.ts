@@ -55,7 +55,7 @@ const DETAIL_INCLUDE = {
   },
   receipts: {
     orderBy: { receivedAt: 'asc' },
-    select: { id: true, number: true, receivedAt: true },
+    select: { id: true, number: true, receivedAt: true, status: true },
   },
 } satisfies Prisma.PurchaseOrderInclude;
 
@@ -458,6 +458,7 @@ function toDetail(o: DetailRow): PurchaseOrderDetail {
       id: r.id,
       number: r.number,
       receivedAt: r.receivedAt.toISOString(),
+      status: r.status,
     })),
   };
 }

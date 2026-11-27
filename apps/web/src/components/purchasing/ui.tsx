@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { CheckCircle2, FileSpreadsheet, Loader2, X, type LucideIcon } from 'lucide-react';
-import type { PurchaseOrderStatus } from '@erp/shared';
+import type { GoodsReceiptStatus, PurchaseOrderStatus } from '@erp/shared';
 import { apiDownload } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import type { MessageKey } from '@/lib/messages';
@@ -172,6 +172,8 @@ const TONES = {
   sky: 'from-sky-400 to-blue-500 shadow-blue-500/25',
   slate: 'from-slate-400 to-slate-600 shadow-slate-500/25',
   emerald: 'from-emerald-400 to-teal-500 shadow-emerald-500/25',
+  violet: 'from-violet-400 to-indigo-500 shadow-indigo-500/25',
+  red: 'from-rose-400 to-red-500 shadow-red-500/25',
 } as const;
 
 export function StatTile({
@@ -251,6 +253,38 @@ export function PoStatusBadge({
         )}
       />
       {t(`po.status.${status}`)}
+    </span>
+  );
+}
+
+export const GR_STATUS_CLASS: Record<GoodsReceiptStatus, string> = {
+  DRAFT: 'bg-slate-100 text-slate-700 ring-slate-500/20',
+  POSTED: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  CANCELLED: 'bg-red-50 text-red-700 ring-red-600/15',
+};
+
+export function ReceiptStatusBadge({
+  status,
+  onHero,
+}: {
+  status: GoodsReceiptStatus;
+  onHero?: boolean;
+}) {
+  const { t } = useI18n();
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1',
+        onHero ? 'bg-white/20 text-white ring-white/40 backdrop-blur' : GR_STATUS_CLASS[status],
+      )}
+    >
+      <span
+        className={clsx(
+          'size-1.5 rounded-full bg-current',
+          status === 'DRAFT' && !onHero && 'animate-pulse',
+        )}
+      />
+      {t(`grx.status.${status}`)}
     </span>
   );
 }

@@ -138,7 +138,7 @@ export interface PurchaseOrderDetail extends PurchaseOrderListItem {
   createdAt: string;
   updatedAt: string;
   lines: PurchaseOrderLineDto[];
-  receipts: { id: string; number: string; receivedAt: string }[];
+  receipts: { id: string; number: string; receivedAt: string; status: GoodsReceiptStatus }[];
 }
 
 export interface PurchaseOrderLineInput {
@@ -164,9 +164,16 @@ export interface PurchaseOrderInput {
 
 // ── Goods receipts ───────────────────────────────────────────────────────────
 
+/** DRAFT = editable, no stock yet; POSTED = in stock, immutable; CANCELLED = reversed. */
+export const GOODS_RECEIPT_STATUSES = ['DRAFT', 'POSTED', 'CANCELLED'] as const;
+export type GoodsReceiptStatus = (typeof GOODS_RECEIPT_STATUSES)[number];
+export type GoodsReceiptStatusFilter = GoodsReceiptStatus | 'all';
+
 export interface GoodsReceiptListItem {
   id: string;
+  /** GR-2026-00001 once posted; "DRAFT-…" before */
   number: string;
+  status: GoodsReceiptStatus;
   /** ISO date-time the goods arrived */
   receivedAt: string;
   purchaseOrder: { id: string; number: string };
@@ -182,6 +189,8 @@ export interface GoodsReceiptListItem {
   /** Value received, after discount and before VAT (3 decimals) */
   value: string;
   createdBy: { id: string; fullName: string };
+  /** none = nothing billed yet, partial, full = every received quantity is on posted bills */
+  billing: 'none' | 'partial' | 'full';
 }
 
 export interface GoodsReceiptLineDto {
@@ -197,10 +206,25 @@ export interface GoodsReceiptLineDto {
   /** Per base unit, after discount, before VAT */
   unitCost: string;
   value: string;
+  /** Refused at reception (never entered the stock), in the order line's unit */
+  rejectedQty: string;
+  rejectReason: string | null;
+  /** Already on posted supplier bills, in the order line's unit */
+  billedQty: string;
+  /** Ordered and already received (posted) on the order line, for drafts */
+  orderedQty: string;
+  receivedOnOrder: string;
 }
 
 export interface GoodsReceiptDetail extends GoodsReceiptListItem {
   notes: string | null;
+  postedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  /** Supplier bills (not cancelled) with lines from this receipt */
+  bills: { id: string; number: string; status: string }[];
+  /** Over-receipt allowed by the company settings, in % of the ordered quantity */
+  tolerancePct: string;
   /** True on the receipt that completed a delivered order: its supplier invoice can be recorded */
   invoiceEditable: boolean;
   createdAt: string;
@@ -224,8 +248,30 @@ export interface GoodsReceiptInput {
   /** YYYY-MM-DD */
   supplierInvoiceDate?: string | null;
   notes?: string | null;
-  /** Lines with a quantity of 0 are ignored; at least one must be above 0 */
-  lines: { purchaseOrderLineId: string; quantity: string }[];
+  /** Lines with a quantity of 0 (and nothing rejected) are ignored */
+  lines: GoodsReceiptLineInput[];
+  /** true = save as a draft (no stock movement); default false = receive and post at once */
+  asDraft?: boolean;
+}
+
+export interface GoodsReceiptLineInput {
+  purchaseOrderLineId: string;
+  /** Accepted quantity, in the order line's unit */
+  quantity: string;
+  /** Refused at the door; does not enter the stock */
+  rejectedQty?: string;
+  rejectReason?: string | null;
+}
+
+/** GET / PATCH /purchasing/receipts/settings */
+export interface ReceivingSettings {
+  /** Receipts may exceed the ordered quantity by up to this % (0 = never), e.g. "5.00" */
+  tolerancePct: string;
+}
+
+/** POST /purchasing/receipts/:id/cancel */
+export interface CancelGoodsReceiptInput {
+  reason: string;
 }
 
 /**
@@ -268,6 +314,8 @@ export interface DeliveryListItem {
 }
 
 export interface GoodsReceiptSummary {
+  /** Draft receipts (not in stock yet) */
+  drafts: number;
   waiting: number;
   inProgress: number;
   /** Orders whose last delivery was this month */

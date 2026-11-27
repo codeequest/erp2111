@@ -577,7 +577,11 @@ export function toListItem(
     imageUrl: productImageUrl(p.imageFile),
     isActive: p.isActive,
   };
-  if (canSeeCost) item.averageCost = p.averageCost.toString();
+  if (canSeeCost) {
+    item.averageCost = p.averageCost.toString();
+    item.lastPurchaseCost = p.lastPurchaseCost.toString();
+    item.lastPurchaseAt = p.lastPurchaseAt?.toISOString() ?? null;
+  }
   return item;
 }
 

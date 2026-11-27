@@ -44,6 +44,10 @@ export interface ProductListItem {
   salePrice: string;
   /** Present only for users with inventory.cost.view */
   averageCost?: string;
+  /** Cost of the latest receipt or supplier bill (base unit) — only with inventory.cost.view */
+  lastPurchaseCost?: string;
+  /** ISO date of that document */
+  lastPurchaseAt?: string | null;
   minStock: string;
   /** Sum of stock in every warehouse, in the base unit */
   stockOnHand: string;

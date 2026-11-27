@@ -17,7 +17,12 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { DELIVERY_STATUSES, type DeliveryStatusFilter } from '@erp/shared';
+import {
+  DELIVERY_STATUSES,
+  GOODS_RECEIPT_STATUSES,
+  type DeliveryStatusFilter,
+  type GoodsReceiptStatusFilter,
+} from '@erp/shared';
 import type { ExportLang } from './purchase-order.dto';
 
 /** Non-negative decimal with up to 4 decimals, sent as a string. */
@@ -41,6 +46,24 @@ export class GoodsReceiptLineDto {
     message: 'quantity must be a non-negative number with at most 4 decimals',
   })
   quantity: string;
+
+  @ApiPropertyOptional({
+    example: '2',
+    description: 'Refused at the door (damaged, wrong item…): does not enter the stock',
+  })
+  @Transform(trim)
+  @IsOptional()
+  @Matches(DECIMAL, {
+    message: 'rejected quantity must be a non-negative number with at most 4 decimals',
+  })
+  rejectedQty?: string;
+
+  @ApiPropertyOptional({ example: 'Damaged packaging' })
+  @Transform(trimToNull)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  rejectReason?: string | null;
 }
 
 export class CreateGoodsReceiptDto {
@@ -96,6 +119,34 @@ export class CreateGoodsReceiptDto {
   @ValidateNested({ each: true })
   @Type(() => GoodsReceiptLineDto)
   lines: GoodsReceiptLineDto[];
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'true = save as a draft (no stock movement until posted)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  asDraft?: boolean;
+}
+
+/** PATCH /purchasing/receipts/:id — drafts only, same order. */
+export class UpdateGoodsReceiptDto extends OmitType(CreateGoodsReceiptDto, ['asDraft'] as const) {}
+
+export class UpdateReceivingSettingsDto {
+  @ApiProperty({ example: '5', description: 'Over-receipt tolerance, 0–50 %' })
+  @Transform(trim)
+  @Matches(/^(50(\.0{1,2})?|[1-4]?\d(\.\d{1,2})?)$/, {
+    message: 'The tolerance must be between 0 and 50 %',
+  })
+  tolerancePct!: string;
+}
+
+export class CancelGoodsReceiptDto {
+  @ApiProperty({ example: 'Received on the wrong order' })
+  @Transform(trimToNull)
+  @IsString({ message: 'Enter the reason of the cancellation' })
+  @MaxLength(500)
+  reason!: string;
 }
 
 /** Supplier invoice of a delivered order (both fields required). */
@@ -112,7 +163,14 @@ export class SetSupplierInvoiceDto {
   supplierInvoiceDate!: string;
 }
 
+const RECEIPT_STATUS_FILTERS = [...GOODS_RECEIPT_STATUSES, 'all'] as const;
+
 export class ListGoodsReceiptsQueryDto {
+  @ApiPropertyOptional({ enum: RECEIPT_STATUS_FILTERS, default: 'all' })
+  @IsOptional()
+  @IsIn(RECEIPT_STATUS_FILTERS)
+  status: GoodsReceiptStatusFilter = 'all';
+
   @ApiPropertyOptional({
     description: 'Matches the receipt number, the order number, the delivery note or the supplier',
   })

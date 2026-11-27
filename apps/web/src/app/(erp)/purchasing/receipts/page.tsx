@@ -18,6 +18,7 @@ import type {
   DeliveryListItem,
   DeliveryStatusFilter,
   GoodsReceiptListItem,
+  GoodsReceiptStatusFilter,
   GoodsReceiptSummary,
   Paginated,
 } from '@erp/shared';
@@ -34,6 +35,7 @@ import {
   ExportButton,
   Pager,
   PurchasingHero,
+  ReceiptStatusBadge,
   Spinner,
   StatTile,
   errorMessages,
@@ -162,7 +164,15 @@ function Deliveries() {
           ))}
         </div>
         {summary && (
-          <p className="text-sm text-slate-500">
+          <p className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+            {summary.drafts > 0 && (
+              <Link
+                href="/purchasing/receipts?view=receipts&status=DRAFT"
+                className="animate-pop inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-300 transition hover:bg-slate-200"
+              >
+                {t('grx.draftsChip', { n: summary.drafts })}
+              </Link>
+            )}
             {t('dl.monthLine', { n: summary.monthReceipts, value: money(summary.monthValue) })}
           </p>
         )}
@@ -531,9 +541,26 @@ function DeliveryDates({ d }: { d: DeliveryListItem }) {
 
 // ── Receipt documents ────────────────────────────────────────────────────────
 
+const RECEIPT_TABS: { key: GoodsReceiptStatusFilter; label: MessageKey }[] = [
+  { key: 'all', label: 'grx.tab.all' },
+  { key: 'DRAFT', label: 'grx.tab.drafts' },
+  { key: 'POSTED', label: 'grx.tab.posted' },
+  { key: 'CANCELLED', label: 'grx.tab.cancelled' },
+];
+
+const BILLING_CLASS = {
+  none: 'bg-slate-50 text-slate-500 ring-slate-400/20',
+  partial: 'bg-amber-50 text-amber-800 ring-amber-600/20',
+  full: 'bg-indigo-50 text-indigo-700 ring-indigo-600/20',
+} as const;
+
 function ReceiptList() {
   const router = useRouter();
   const { t, money, date, dateTime } = useI18n();
+  const params = useSearchParams();
+  const [status, setStatus] = useState<GoodsReceiptStatusFilter>(
+    (params.get('status') as GoodsReceiptStatusFilter) || 'all',
+  );
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [from, setFrom] = useState('');
@@ -551,7 +578,7 @@ function ReceiptList() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const qs = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    const qs = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE), status });
     if (debounced) qs.set('search', debounced);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
@@ -566,10 +593,11 @@ function ReceiptList() {
     return () => {
       cancelled = true;
     };
-  }, [page, debounced, from, to]);
+  }, [page, debounced, from, to, status]);
 
-  const filtered = Boolean(debounced || from || to);
+  const filtered = Boolean(debounced || from || to || status !== 'all');
   const exportQuery = new URLSearchParams({
+    ...(status !== 'all' && { status }),
     ...(debounced && { search: debounced }),
     ...(from && { from }),
     ...(to && { to }),
@@ -580,6 +608,25 @@ function ReceiptList() {
       className="animate-rise overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
       style={{ animationDelay: '180ms' }}
     >
+      <div className="flex flex-wrap gap-1 border-b border-slate-100 px-3 pt-3">
+        {RECEIPT_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => {
+              setStatus(tab.key);
+              setPage(1);
+            }}
+            className={clsx(
+              'relative rounded-t-lg px-3 py-2 text-sm font-medium transition',
+              status === tab.key
+                ? 'text-orange-700 after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-gradient-to-r after:from-amber-500 after:to-orange-600'
+                : 'text-slate-500 hover:text-slate-800',
+            )}
+          >
+            {t(tab.label)}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-3">
         <div className="relative min-w-56 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
@@ -659,6 +706,7 @@ function ReceiptList() {
                 <th className="hidden px-4 py-2.5 lg:table-cell">{t('gr.col.bl')}</th>
                 <th className="hidden px-4 py-2.5 lg:table-cell">{t('dl.col.invoice')}</th>
                 <th className="px-4 py-2.5 text-right">{t('gr.col.value')}</th>
+                <th className="px-4 py-2.5">{t('grx.col.status')}</th>
                 <th className="hidden px-4 py-2.5 xl:table-cell">{t('gr.col.by')}</th>
               </tr>
             </thead>
@@ -715,6 +763,21 @@ function ReceiptList() {
                   </td>
                   <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-slate-900 tabular-nums">
                     {money(r.value)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-start gap-1">
+                      <ReceiptStatusBadge status={r.status} />
+                      {r.status === 'POSTED' && (
+                        <span
+                          className={clsx(
+                            'rounded-full px-1.5 py-px text-[10px] font-medium whitespace-nowrap ring-1',
+                            BILLING_CLASS[r.billing],
+                          )}
+                        >
+                          {t(`grx.billing.${r.billing}`)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="hidden px-4 py-3 text-slate-600 xl:table-cell">
                     {r.createdBy.fullName}

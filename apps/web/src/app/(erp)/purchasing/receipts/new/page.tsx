@@ -8,6 +8,7 @@ import {
   CheckCheck,
   CheckCircle2,
   Eraser,
+  FilePen,
   ExternalLink,
   PackageCheck,
   ScanBarcode,
@@ -21,6 +22,7 @@ import type {
   Paginated,
   PurchaseOrderDetail,
   PurchaseOrderListItem,
+  ReceivingSettings,
 } from '@erp/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -62,8 +64,16 @@ function NewReceipt() {
   const { can } = useAuth();
   const router = useRouter();
   const { t, money, qty, date, lang } = useI18n();
-  const presetOrderId = useSearchParams().get('orderId') ?? '';
+  const searchParams = useSearchParams();
+  const presetOrderId = searchParams.get('orderId') ?? '';
+  /** Editing a draft receipt */
+  const draftId = searchParams.get('draftId') ?? '';
   const { burst, celebrate } = useSuccess();
+  const [draft, setDraft] = useState<GoodsReceiptDetail | null>(null);
+  const pendingDraft = useRef<GoodsReceiptDetail | null>(null);
+  const [rejected, setRejected] = useState<Record<string, string>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [tolerance, setTolerance] = useState(0);
 
   const [openOrders, setOpenOrders] = useState<PurchaseOrderListItem[] | null>(null);
   const [orderId, setOrderId] = useState(presetOrderId);
@@ -75,7 +85,7 @@ function NewReceipt() {
   const [notes, setNotes] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<false | 'draft' | 'post'>(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | string[] | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -84,11 +94,37 @@ function NewReceipt() {
     api<Paginated<PurchaseOrderListItem>>('/purchasing/orders?status=open&pageSize=100')
       .then((r) => setOpenOrders(r.items))
       .catch(() => setOpenOrders([]));
+    api<ReceivingSettings>('/purchasing/receipts/settings')
+      .then((s) => setTolerance(Number(s.tolerancePct)))
+      .catch(() => undefined);
   }, []);
+
+  // Draft being edited: load it, then its order (the quantities are applied once the order is in)
+  useEffect(() => {
+    if (!draftId) return;
+    api<GoodsReceiptDetail>(`/purchasing/receipts/${draftId}`)
+      .then((d) => {
+        if (d.status !== 'DRAFT') {
+          router.replace(`/purchasing/receipts/${d.id}`);
+          return;
+        }
+        setDraft(d);
+        pendingDraft.current = d;
+        setOrderId(d.purchaseOrder.id);
+        setReceivedDate(d.receivedAt.slice(0, 10));
+        setSupplierRef(d.supplierRef ?? '');
+        setNotes(d.notes ?? '');
+        setInvoiceNumber(d.supplierInvoiceNumber ?? '');
+        setInvoiceDate(d.supplierInvoiceDate ?? '');
+      })
+      .catch((e) => setError(errorMessages(e)));
+  }, [draftId, router]);
 
   useEffect(() => {
     setOrder(null);
     setQuantities({});
+    setRejected({});
+    setReasons({});
     setError(null);
     setSubmitted(false);
     if (!orderId) return;
@@ -96,7 +132,19 @@ function NewReceipt() {
     api<PurchaseOrderDetail>(`/purchasing/orders/${orderId}`)
       .then((o) => {
         setOrder(o);
-        setQuantities(Object.fromEntries(o.lines.map((l) => [l.id, ''])));
+        const d = pendingDraft.current;
+        const byLine = new Map((d?.lines ?? []).map((l) => [l.purchaseOrderLineId, l]));
+        const fmt4 = (v: string) => (Number(v) ? String(Number(v)) : '');
+        setQuantities(
+          Object.fromEntries(o.lines.map((l) => [l.id, fmt4(byLine.get(l.id)?.quantity ?? '')])),
+        );
+        setRejected(
+          Object.fromEntries(o.lines.map((l) => [l.id, fmt4(byLine.get(l.id)?.rejectedQty ?? '')])),
+        );
+        setReasons(
+          Object.fromEntries(o.lines.map((l) => [l.id, byLine.get(l.id)?.rejectReason ?? ''])),
+        );
+        pendingDraft.current = null;
       })
       .catch((e) => setError(errorMessages(e)))
       .finally(() => setLoadingOrder(false));
@@ -108,21 +156,44 @@ function NewReceipt() {
         const remaining = Math.max(0, Number(l.quantity) - Number(l.receivedQty));
         const raw = quantities[l.id] ?? '';
         const now = raw === '' ? 0 : Number(raw);
-        const invalid = raw !== '' && !DECIMAL_4.test(raw);
-        const over = !invalid && now > remaining + 1e-9;
+        const rawRejected = rejected[l.id] ?? '';
+        const refused = rawRejected === '' ? 0 : Number(rawRejected);
+        const invalid =
+          (raw !== '' && !DECIMAL_4.test(raw)) ||
+          (rawRejected !== '' && !DECIMAL_4.test(rawRejected));
+        // Over-receipt tolerance (company settings), as a % of the ordered quantity
+        const limit = Math.max(0, remaining + (Number(l.quantity) * tolerance) / 100);
+        const over = !invalid && now > limit + 1e-9;
+        const extra = !over && now > remaining + 1e-9;
+        const reason = reasons[l.id] ?? '';
+        const reasonMissing = refused > 0 && !reason.trim();
         const netPrice = (Number(l.unitPrice) * (100 - Number(l.discountPct))) / 100;
         const gross = millimes(now * Number(l.unitPrice));
         const value = invalid
           ? 0
           : millimes(gross - millimes((gross * Number(l.discountPct)) / 100));
-        return { l, remaining, raw, now, invalid, over, netPrice, value };
+        return {
+          l,
+          remaining,
+          raw,
+          now,
+          invalid,
+          over,
+          extra,
+          netPrice,
+          value,
+          rawRejected,
+          refused,
+          reason,
+          reasonMissing,
+        };
       }),
-    [order, quantities],
+    [order, quantities, rejected, reasons, tolerance],
   );
 
-  const receiving = rows.filter((r) => r.now > 0 && !r.invalid);
+  const receiving = rows.filter((r) => (r.now > 0 || r.refused > 0) && !r.invalid);
   const totalValue = receiving.reduce((s, r) => s + r.value, 0);
-  const hasLineErrors = rows.some((r) => r.invalid || r.over);
+  const hasLineErrors = rows.some((r) => r.invalid || r.over || r.reasonMissing);
   const willComplete =
     rows.length > 0 && rows.every((r) => r.remaining - (r.invalid ? 0 : r.now) <= 1e-9);
   const orderDate = order?.orderDate ?? '';
@@ -182,7 +253,7 @@ function NewReceipt() {
     return { ok: true };
   }
 
-  async function submit() {
+  async function submit(asDraft: boolean) {
     setSubmitted(true);
     setError(null);
     if (!order || hasLineErrors || dateError || invoiceError) return;
@@ -190,7 +261,7 @@ function NewReceipt() {
       setError(t('grf.needQty'));
       return;
     }
-    setSaving(true);
+    setSaving(asDraft ? 'draft' : 'post');
     const body: GoodsReceiptInput = {
       purchaseOrderId: order.id,
       receivedDate,
@@ -198,14 +269,32 @@ function NewReceipt() {
       supplierInvoiceNumber: (invoiceOpen && invoiceNumber.trim()) || null,
       supplierInvoiceDate: (invoiceOpen && invoiceDate) || null,
       notes: notes.trim() || null,
-      lines: receiving.map((r) => ({ purchaseOrderLineId: r.l.id, quantity: r.raw })),
+      lines: receiving.map((r) => ({
+        purchaseOrderLineId: r.l.id,
+        quantity: r.raw || '0',
+        rejectedQty: r.rawRejected || '0',
+        rejectReason: r.refused > 0 ? r.reason.trim() : null,
+      })),
     };
     try {
-      const receipt = await api<GoodsReceiptDetail>('/purchasing/receipts', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      celebrate(t('grf.saved', { number: receipt.number }), () =>
+      let receipt: GoodsReceiptDetail;
+      if (draft) {
+        receipt = await api<GoodsReceiptDetail>(`/purchasing/receipts/${draft.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+        if (!asDraft) {
+          receipt = await api<GoodsReceiptDetail>(`/purchasing/receipts/${draft.id}/post`, {
+            method: 'POST',
+          });
+        }
+      } else {
+        receipt = await api<GoodsReceiptDetail>('/purchasing/receipts', {
+          method: 'POST',
+          body: JSON.stringify({ ...body, asDraft }),
+        });
+      }
+      celebrate(asDraft ? t('grx.draftSaved') : t('grf.saved', { number: receipt.number }), () =>
         router.push(`/purchasing/receipts/${receipt.id}`),
       );
     } catch (e) {
@@ -218,9 +307,12 @@ function NewReceipt() {
     <div className="mx-auto max-w-7xl space-y-5 pb-4">
       <PurchasingHero
         icon={PackageCheck}
-        title={t('grf.title')}
+        title={draft ? t('grx.editTitle') : t('grf.title')}
         subtitle={t('grf.subtitle')}
-        crumb={[{ label: t('gr.title'), href: '/purchasing/receipts' }, { label: t('grf.crumb') }]}
+        crumb={[
+          { label: t('gr.title'), href: '/purchasing/receipts' },
+          { label: draft ? t('grx.editCrumb') : t('grf.crumb') },
+        ]}
       />
 
       {error && <ErrorBox message={error} />}
@@ -230,10 +322,11 @@ function NewReceipt() {
         className="animate-rise rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
         style={{ animationDelay: '80ms' }}
       >
-        <fieldset disabled={saving} className="grid gap-4 md:grid-cols-12">
+        <fieldset disabled={Boolean(saving)} className="grid gap-4 md:grid-cols-12">
           <Field label={t('grf.order')} className="md:col-span-6">
             <select
               value={orderId}
+              disabled={Boolean(draft)}
               onChange={(e) => {
                 setOrderId(e.target.value);
                 router.replace(
@@ -374,13 +467,13 @@ function NewReceipt() {
           <h2 className="font-semibold text-slate-900">{t('grf.lines')}</h2>
           {order && (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <ScanBox onScan={scan} disabled={saving} />
+              <ScanBox onScan={scan} disabled={Boolean(saving)} />
               <div className="flex gap-2">
                 <button
                   type="button"
                   className={clsx(btnSecondary, 'flex-1')}
                   onClick={receiveAll}
-                  disabled={saving}
+                  disabled={Boolean(saving)}
                 >
                   <CheckCheck className="size-4" /> {t('grf.all')}
                 </button>
@@ -388,7 +481,7 @@ function NewReceipt() {
                   type="button"
                   className={btnSecondary}
                   onClick={() => setQuantities({})}
-                  disabled={saving}
+                  disabled={Boolean(saving)}
                   title={t('grf.clear')}
                   aria-label={t('grf.clear')}
                 >
@@ -421,6 +514,7 @@ function NewReceipt() {
                   <th className="w-44 px-4 py-2.5">{t('grf.col.already')}</th>
                   <th className="px-4 py-2.5 text-right">{t('grf.col.remaining')}</th>
                   <th className="w-40 px-4 py-2.5 text-right">{t('grf.col.now')}</th>
+                  <th className="w-44 px-4 py-2.5 text-right">{t('grx.col.refused')}</th>
                   <th className="px-4 py-2.5 text-right">{t('grf.col.value')}</th>
                 </tr>
               </thead>
@@ -492,7 +586,7 @@ function NewReceipt() {
                                 inputMode="decimal"
                                 value={show(r.raw)}
                                 placeholder="0"
-                                disabled={saving}
+                                disabled={Boolean(saving)}
                                 onChange={(e) => setQty(r.l.id, e.target.value)}
                                 onFocus={(e) => e.target.select()}
                                 className={clsx(
@@ -509,7 +603,13 @@ function NewReceipt() {
                             </div>
                             {r.over ? (
                               <p className="mt-1 text-right text-[11px] text-red-600">
-                                {t('grf.over')}
+                                {tolerance > 0
+                                  ? t('grx.overTolerance', { pct: tolerance })
+                                  : t('grf.over')}
+                              </p>
+                            ) : r.extra ? (
+                              <p className="mt-1 text-right text-[11px] text-amber-700">
+                                {t('grx.extra', { pct: tolerance })}
                               </p>
                             ) : (
                               factor !== 1 &&
@@ -518,6 +618,47 @@ function NewReceipt() {
                                   = {qty(r.now * factor)} {r.l.product.baseUnitCode}
                                 </p>
                               )
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {!done && (
+                          <>
+                            <input
+                              inputMode="decimal"
+                              value={show(r.rawRejected)}
+                              placeholder="0"
+                              disabled={Boolean(saving)}
+                              aria-label={t('grx.col.refused')}
+                              onChange={(e) =>
+                                setRejected((q) => ({
+                                  ...q,
+                                  [r.l.id]: e.target.value.trim().replace(',', '.'),
+                                }))
+                              }
+                              onFocus={(e) => e.target.select()}
+                              className={clsx(
+                                fieldClass,
+                                'w-full px-2 text-right tabular-nums',
+                                r.refused > 0 && 'border-red-300 bg-red-50/40',
+                              )}
+                            />
+                            {r.refused > 0 && (
+                              <input
+                                value={r.reason}
+                                maxLength={200}
+                                disabled={Boolean(saving)}
+                                placeholder={t('grx.reasonPh')}
+                                onChange={(e) =>
+                                  setReasons((q) => ({ ...q, [r.l.id]: e.target.value }))
+                                }
+                                className={clsx(
+                                  fieldClass,
+                                  'animate-fade mt-1 w-full px-2 text-xs',
+                                  submitted && r.reasonMissing && 'animate-shake border-red-400!',
+                                )}
+                              />
                             )}
                           </>
                         )}
@@ -577,19 +718,37 @@ function NewReceipt() {
         className="animate-rise sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 shadow-lg backdrop-blur"
         style={{ animationDelay: '240ms' }}
       >
-        <p className="mr-auto hidden text-xs text-slate-500 sm:block">{t('grf.final')}</p>
+        <p className="mr-auto hidden text-xs text-slate-500 sm:block">{t('grx.finalNote')}</p>
         <button
           className={btnSecondary}
           onClick={() =>
-            router.push(order ? `/purchasing/orders/${order.id}` : '/purchasing/receipts')
+            router.push(
+              draft
+                ? `/purchasing/receipts/${draft.id}`
+                : order
+                  ? `/purchasing/orders/${order.id}`
+                  : '/purchasing/receipts',
+            )
           }
-          disabled={saving}
+          disabled={Boolean(saving)}
         >
           {t('common.cancel')}
         </button>
-        <button className={btnPrimary} onClick={() => void submit()} disabled={saving || !order}>
-          {saving ? <Spinner /> : <PackageCheck className="size-4" />}
-          {t('grf.submit')}
+        <button
+          className={btnSecondary}
+          onClick={() => void submit(true)}
+          disabled={Boolean(saving) || !order}
+        >
+          {saving === 'draft' ? <Spinner /> : <FilePen className="size-4" />}
+          {t('grx.saveDraft')}
+        </button>
+        <button
+          className={btnPrimary}
+          onClick={() => void submit(false)}
+          disabled={Boolean(saving) || !order}
+        >
+          {saving === 'post' ? <Spinner /> : <PackageCheck className="size-4" />}
+          {draft ? t('grx.saveAndPost') : t('grf.submit')}
           {receiving.length > 0 && (
             <span className="rounded-full bg-white/25 px-1.5 text-xs">{receiving.length}</span>
           )}

@@ -27,6 +27,8 @@ const product = {
   taxRateId: null,
   salePrice: D('12.5'),
   averageCost: D('7.25'),
+  lastPurchaseCost: D('7.25'),
+  lastPurchaseAt: null,
   minStock: D(0),
   imageFile: null,
   isActive: true,

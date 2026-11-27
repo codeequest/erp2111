@@ -83,6 +83,11 @@ export const PERMISSION_DEFINITIONS = [
     module: 'purchasing',
     description: 'Receive goods against a purchase order',
   },
+  {
+    code: 'purchasing.receipt.cancel',
+    module: 'purchasing',
+    description: 'Cancel a posted goods receipt (takes the goods out of stock again)',
+  },
 
   // Sales
   { code: 'sales.customer.read', module: 'sales', description: 'View customers' },

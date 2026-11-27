@@ -50,6 +50,7 @@ export const DEFAULT_ROLES: DefaultRole[] = [
       'purchasing.order.read',
       'purchasing.order.write',
       'purchasing.order.confirm',
+      'purchasing.receipt.cancel',
       'invoicing.bill.read',
     ],
   },
