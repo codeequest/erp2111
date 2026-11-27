@@ -3,30 +3,31 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import clsx from 'clsx';
 import {
+  AlertTriangle,
   ArrowLeft,
   Ban,
+  ClipboardList,
+  Lock,
+  Mail,
+  MapPin,
+  PackageCheck,
+  Pencil,
+  Phone,
+  Printer,
+  ReceiptText,
   Send,
   Trash2,
-  ReceiptText,
-  ClipboardList,
-  FileText,
-  Lock,
-  Pencil,
-  PackageCheck,
-  Receipt,
-  Truck,
-  UserRound,
-  Warehouse,
 } from 'lucide-react';
 import type { GoodsReceiptDetail } from '@erp/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { AccessDenied } from '@/components/page-header';
-import { SupplierInvoiceDialog } from '@/components/purchasing/invoice-dialog';
 import {
   ErrorBox,
+  ExportButton,
   Field,
   Modal,
   PurchasingHero,
@@ -43,51 +44,21 @@ import {
 
 export default function GoodsReceiptPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { can } = useAuth();
   const { t, money, qty, date, dateTime } = useI18n();
   const canRead = can('purchasing.order.read');
-  const [receipt, setReceipt] = useState<GoodsReceiptDetail | null>(null);
-  const [error, setError] = useState<string | string[] | null>(null);
-  const [invoiceOpen, setInvoiceOpen] = useState(false);
-  const { burst, celebrate } = useSuccess();
-  const canInvoice = can('purchasing.receipt.create');
+  const canEdit = can('purchasing.receipt.create');
   const canCancel = can('purchasing.receipt.cancel');
   const canBill = can('invoicing.bill.write');
-  const router = useRouter();
-  const [busy, setBusy] = useState<null | 'post' | 'delete' | 'cancel'>(null);
+  const [receipt, setReceipt] = useState<GoodsReceiptDetail | null>(null);
+  const [error, setError] = useState<string | string[] | null>(null);
   const [actionError, setActionError] = useState<string | string[] | null>(null);
+  const [busy, setBusy] = useState<null | 'post' | 'delete' | 'cancel'>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reason, setReason] = useState('');
-
-  async function act(kind: 'post' | 'delete' | 'cancel') {
-    setBusy(kind);
-    setActionError(null);
-    try {
-      if (kind === 'delete') {
-        await api(`/purchasing/receipts/${id}`, { method: 'DELETE' });
-        router.push('/purchasing/receipts?view=receipts');
-        return;
-      }
-      const r = await api<GoodsReceiptDetail>(`/purchasing/receipts/${id}/${kind}`, {
-        method: 'POST',
-        ...(kind === 'cancel' && { body: JSON.stringify({ reason: reason.trim() }) }),
-      });
-      setReceipt(r);
-      setCancelOpen(false);
-      celebrate(
-        kind === 'post'
-          ? t('grf.saved', { number: r.number })
-          : t('grx.cancelled', { number: r.number }),
-      );
-    } catch (e) {
-      setActionError(errorMessages(e));
-      setCancelOpen(false);
-      setDeleteOpen(false);
-    } finally {
-      setBusy(null);
-    }
-  }
+  const { burst, celebrate } = useSuccess();
 
   useEffect(() => {
     if (!canRead) return;
@@ -96,9 +67,7 @@ export default function GoodsReceiptPage() {
       .catch((e) => setError(errorMessages(e)));
   }, [canRead, id]);
 
-  if (!canRead) {
-    return <AccessDenied permission="purchasing.order.read" what={t('gr.title')} />;
-  }
+  if (!canRead) return <AccessDenied permission="purchasing.order.read" what={t('gr.title')} />;
   if (error) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
@@ -120,10 +89,39 @@ export default function GoodsReceiptPage() {
     );
   }
 
-  const baseTotals = receipt.lines.reduce<Record<string, number>>((acc, l) => {
-    acc[l.product.baseUnitCode] = (acc[l.product.baseUnitCode] ?? 0) + Number(l.baseQuantity);
-    return acc;
-  }, {});
+  const r = receipt;
+  const s = r.supplierInfo;
+  const posted = r.status === 'POSTED';
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function act(kind: 'post' | 'delete' | 'cancel') {
+    setBusy(kind);
+    setActionError(null);
+    try {
+      if (kind === 'delete') {
+        await api(`/purchasing/receipts/${id}`, { method: 'DELETE' });
+        router.push('/purchasing/receipts?status=DRAFT');
+        return;
+      }
+      const next = await api<GoodsReceiptDetail>(`/purchasing/receipts/${id}/${kind}`, {
+        method: 'POST',
+        ...(kind === 'cancel' && { body: JSON.stringify({ reason: reason.trim() }) }),
+      });
+      setReceipt(next);
+      setCancelOpen(false);
+      celebrate(
+        kind === 'post'
+          ? t('grf.saved', { number: next.number })
+          : t('grx.cancelled', { number: next.number }),
+      );
+    } catch (e) {
+      setActionError(errorMessages(e));
+      setCancelOpen(false);
+      setDeleteOpen(false);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -135,32 +133,23 @@ export default function GoodsReceiptPage() {
       </Link>
       <PurchasingHero
         icon={PackageCheck}
-        title={receipt.number}
+        title={r.number}
         badge={
-          receipt.status === 'POSTED' ? (
+          posted ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium text-white ring-1 ring-white/40 backdrop-blur">
-              <Lock className="size-3" /> {t('grp.final')}
+              <Lock className="size-3" /> {t('grx.status.POSTED')}
             </span>
           ) : (
-            <ReceiptStatusBadge status={receipt.status} onHero />
+            <ReceiptStatusBadge status={r.status} onHero />
           )
         }
-        subtitle={`${receipt.supplier.name} · ${money(receipt.value)} ${t('grp.ht')}`}
-        crumb={[{ label: t('gr.title'), href: '/purchasing/receipts' }, { label: receipt.number }]}
+        subtitle={`${s.name} · ${money(r.value)} ${t('grp.ht')}`}
+        crumb={[{ label: t('gr.title'), href: '/purchasing/receipts' }, { label: r.number }]}
         actions={
           <>
-            <Link
-              href={`/purchasing/orders/${receipt.purchaseOrder.id}`}
-              className={heroGhostButton}
-            >
-              <ClipboardList className="size-4" /> {receipt.purchaseOrder.number}
-            </Link>
-            {receipt.status === 'DRAFT' && canInvoice && (
+            {r.status === 'DRAFT' && canEdit && (
               <>
-                <Link
-                  href={`/purchasing/receipts/new?draftId=${receipt.id}`}
-                  className={heroGhostButton}
-                >
+                <Link href={`/purchasing/receipts/new?draftId=${r.id}`} className={heroGhostButton}>
                   <Pencil className="size-4" /> {t('grx.edit')}
                 </Link>
                 <button
@@ -179,231 +168,88 @@ export default function GoodsReceiptPage() {
                 </button>
               </>
             )}
-            {receipt.status === 'POSTED' && canCancel && receipt.bills.length === 0 && (
-              <button
-                className={heroGhostButton}
-                onClick={() => setCancelOpen(true)}
-                disabled={Boolean(busy)}
-              >
-                <Ban className="size-4" /> {t('grx.cancel')}
-              </button>
-            )}
-            {receipt.status === 'POSTED' && canBill && receipt.billing !== 'full' && (
-              <Link
-                href={`/invoicing/bills/new?supplierId=${receipt.supplier.id}&receiptId=${receipt.id}`}
-                className={heroButton}
-              >
-                <ReceiptText className="size-4" /> {t('grx.createBill')}
-              </Link>
+            {posted && (
+              <>
+                <Link href={`/print/receipts/${r.id}`} target="_blank" className={heroGhostButton}>
+                  <Printer className="size-4" /> {t('grr.print')}
+                </Link>
+                <ExportButton
+                  path={`/purchasing/receipts/${r.id}/export`}
+                  fileName={`${r.number}.xlsx`}
+                  onHero
+                />
+                {canCancel && r.bills.length === 0 && (
+                  <button
+                    className={heroGhostButton}
+                    onClick={() => setCancelOpen(true)}
+                    disabled={Boolean(busy)}
+                  >
+                    <Ban className="size-4" /> {t('grx.cancel')}
+                  </button>
+                )}
+                {canBill && r.billing !== 'full' && (
+                  <Link
+                    href={`/invoicing/bills/new?supplierId=${s.id}&receiptId=${r.id}`}
+                    className={heroButton}
+                  >
+                    <ReceiptText className="size-4" /> {t('grx.createBill')}
+                  </Link>
+                )}
+              </>
             )}
           </>
         }
       />
 
       {actionError && <ErrorBox message={actionError} />}
-      {receipt.status === 'CANCELLED' && (
+      {r.status === 'CANCELLED' && (
         <div className="animate-fade flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <Ban className="mt-0.5 size-4 shrink-0" />
           <div>
-            <p className="font-medium">
-              {t('grx.cancelledOn', { date: dateTime(receipt.cancelledAt) })}
-            </p>
-            {receipt.cancelReason && <p className="text-red-700">{receipt.cancelReason}</p>}
+            <p className="font-medium">{t('grx.cancelledOn', { date: dateTime(r.cancelledAt) })}</p>
+            {r.cancelReason && <p className="text-red-700">{r.cancelReason}</p>}
           </div>
         </div>
       )}
-      {receipt.status === 'DRAFT' && (
+      {r.status === 'DRAFT' && (
         <div className="animate-fade flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
           <Pencil className="mt-0.5 size-4 shrink-0 text-slate-400" />
-          {t('grx.draftBanner')}
+          {t('grr.draftBanner')}
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Header: reception + supplier */}
+      <div className="grid gap-5 md:grid-cols-2">
         <section
-          className="animate-rise overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2"
-          style={{ animationDelay: '80ms' }}
+          className="animate-rise rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          style={{ animationDelay: '60ms' }}
         >
-          <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-slate-900">
-            {t('grp.lines')}{' '}
-            <span className="text-sm font-normal text-slate-400">({receipt.lines.length})</span>
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead className="bg-slate-50/80 text-left text-xs font-medium tracking-wide text-slate-500 uppercase">
-                <tr>
-                  <th className="px-4 py-2.5">{t('grp.col.product')}</th>
-                  <th className="px-4 py-2.5 text-right">{t('grp.col.qty')}</th>
-                  <th className="px-4 py-2.5 text-right">{t('grp.col.stock')}</th>
-                  <th className="hidden px-4 py-2.5 text-right md:table-cell">
-                    {t('grx.col.refused')}
-                  </th>
-                  <th className="hidden px-4 py-2.5 text-right md:table-cell">
-                    {t('grx.col.billed')}
-                  </th>
-                  <th className="px-4 py-2.5 text-right">{t('grp.col.cost')}</th>
-                  <th className="px-4 py-2.5 text-right">{t('grp.col.value')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {receipt.lines.map((l, i) => (
-                  <tr
-                    key={l.id}
-                    className="animate-rise"
-                    style={{ animationDelay: `${120 + Math.min(i, 12) * 35}ms` }}
-                  >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/inventory/products/${l.product.id}`}
-                        className="font-medium text-slate-900 hover:text-orange-700"
-                      >
-                        {l.product.name}
-                      </Link>
-                      <p className="font-mono text-xs text-slate-400">{l.product.sku}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
-                      {qty(l.quantity)}{' '}
-                      <span className="text-xs text-slate-400">{l.unit.code}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
-                      <span
-                        className={
-                          receipt.status === 'POSTED'
-                            ? 'font-medium text-emerald-700'
-                            : 'text-slate-400 line-through decoration-slate-300'
-                        }
-                      >
-                        +{qty(l.baseQuantity)}
-                      </span>{' '}
-                      <span className="text-xs text-slate-400">{l.product.baseUnitCode}</span>
-                    </td>
-                    <td className="hidden px-4 py-3 text-right whitespace-nowrap tabular-nums md:table-cell">
-                      {Number(l.rejectedQty) > 0 ? (
-                        <span title={l.rejectReason ?? undefined}>
-                          <span className="font-medium text-red-600">{qty(l.rejectedQty)}</span>{' '}
-                          <span className="text-xs text-slate-400">{l.unit.code}</span>
-                          <p className="max-w-40 truncate text-[11px] text-slate-400">
-                            {l.rejectReason}
-                          </p>
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="hidden px-4 py-3 text-right whitespace-nowrap tabular-nums md:table-cell">
-                      {Number(l.billedQty) > 0 ? (
-                        <span
-                          className={
-                            Number(l.billedQty) >= Number(l.quantity)
-                              ? 'font-medium text-indigo-700'
-                              : 'text-amber-700'
-                          }
-                        >
-                          {qty(l.billedQty)} / {qty(l.quantity)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap text-slate-600 tabular-nums">
-                      {money(l.unitCost)}
-                      <span className="text-xs text-slate-400"> / {l.product.baseUnitCode}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-slate-900 tabular-nums">
-                      {money(l.value)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-100 bg-gradient-to-br from-slate-50 to-emerald-50/40 px-5 py-4">
-            <p className="flex max-w-md items-start gap-2 text-xs text-slate-500">
-              <PackageCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-              {receipt.status === 'POSTED'
-                ? t('grp.stockNote', {
-                    stock: Object.entries(baseTotals)
-                      .map(([unit, n]) => `+${qty(n)} ${unit}`)
-                      .join(', '),
-                    warehouse: receipt.warehouse.code,
-                  })
-                : receipt.status === 'DRAFT'
-                  ? t('grx.draftNote')
-                  : t('grx.cancelledNote')}
-            </p>
-            <div className="flex items-baseline gap-6">
-              <span className="font-semibold text-slate-900">{t('grp.total')}</span>
-              <span className="text-xl font-semibold text-orange-700 tabular-nums">
-                {money(receipt.value)}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <aside className="space-y-6">
-          <section
-            className="animate-rise rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            style={{ animationDelay: '140ms' }}
-          >
-            <h2 className="font-semibold text-slate-900">{t('pop.details')}</h2>
-            <dl className="mt-3 space-y-3 text-sm">
-              <Info icon={Truck} label={t('grp.supplier')}>
+          <h2 className="mb-3 font-semibold text-slate-900">{t('grr.sec.receipt')}</h2>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <Info label={t('grf.date')} value={dateTime(r.receivedAt)} />
+            <Info label={t('grf.bl')} value={r.supplierRef} mono />
+            <Info
+              label={t('grp.order')}
+              value={
                 <Link
-                  href={`/purchasing/orders?supplierId=${receipt.supplier.id}`}
-                  className="font-medium hover:text-orange-700"
+                  href={`/purchasing/orders/${r.purchaseOrder.id}`}
+                  className="inline-flex items-center gap-1 font-mono text-xs font-semibold hover:text-orange-700 hover:underline"
                 >
-                  {receipt.supplier.name}
+                  <ClipboardList className="size-3.5" /> {r.purchaseOrder.number}
                 </Link>
-                <p className="font-mono text-xs text-slate-400">{receipt.supplier.code}</p>
-              </Info>
-              <Info icon={ClipboardList} label={t('grp.order')}>
-                <Link
-                  href={`/purchasing/orders/${receipt.purchaseOrder.id}`}
-                  className="font-mono text-xs font-semibold hover:text-orange-700 hover:underline"
-                >
-                  {receipt.purchaseOrder.number}
-                </Link>
-              </Info>
-              <Info icon={FileText} label={t('grp.bl')}>
-                <span className="font-mono text-xs">{receipt.supplierRef ?? '—'}</span>
-              </Info>
-              <Info icon={Receipt} label={t('grp.invoice')}>
-                {receipt.supplierInvoiceNumber ? (
-                  <>
-                    <span className="font-mono text-xs font-medium">
-                      {receipt.supplierInvoiceNumber}
-                    </span>
-                    <p className="text-xs text-slate-400">
-                      {t('grp.invoiceOf', { date: date(receipt.supplierInvoiceDate) })}
-                    </p>
-                  </>
-                ) : receipt.invoiceEditable ? (
-                  <span className="text-amber-700">{t('inv.missing')}</span>
-                ) : (
-                  <span className="text-slate-400">{t('inv.afterDelivery')}</span>
-                )}
-                {receipt.invoiceEditable && canInvoice && (
-                  <button
-                    onClick={() => setInvoiceOpen(true)}
-                    className={
-                      receipt.supplierInvoiceNumber
-                        ? 'mt-1 inline-flex items-center gap-1 text-xs font-medium text-orange-700 hover:underline'
-                        : 'mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-2.5 py-1 text-xs font-medium text-white shadow-sm shadow-orange-600/20 transition hover:brightness-105 active:scale-[0.98]'
-                    }
-                  >
-                    {receipt.supplierInvoiceNumber ? (
-                      <Pencil className="size-3" />
-                    ) : (
-                      <Receipt className="size-3.5" />
-                    )}
-                    {receipt.supplierInvoiceNumber ? t('inv.edit') : t('inv.record')}
-                  </button>
-                )}
-              </Info>
-              {receipt.bills.length > 0 && (
-                <Info icon={ReceiptText} label={t('grx.bills')}>
+              }
+              sub={date(r.purchaseOrderDate)}
+            />
+            <Info label={t('grp.warehouse')} value={`${r.warehouse.code} · ${r.warehouse.name}`} />
+            <Info label={t('grp.by')} value={r.createdBy.fullName} />
+            <Info label={t('grr.validatedOn')} value={r.postedAt ? dateTime(r.postedAt) : '—'} />
+            {r.bills.length > 0 && (
+              <Info
+                label={t('grx.bills')}
+                wide
+                value={
                   <span className="flex flex-wrap gap-x-2">
-                    {receipt.bills.map((b) => (
+                    {r.bills.map((b) => (
                       <Link
                         key={b.id}
                         href={`/invoicing/bills/${b.id}`}
@@ -412,63 +258,157 @@ export default function GoodsReceiptPage() {
                         {b.number}
                       </Link>
                     ))}
+                    <span className="text-xs text-slate-400">
+                      · {t(`grx.billing.${r.billing}`)}
+                    </span>
                   </span>
-                  <p className="text-xs text-slate-400">{t(`grx.billing.${receipt.billing}`)}</p>
-                </Info>
-              )}
-              <Info icon={Warehouse} label={t('grp.warehouse')}>
-                {receipt.warehouse.code} · {receipt.warehouse.name}
-              </Info>
-              <Info icon={UserRound} label={t('grp.by')}>
-                {receipt.createdBy.fullName}
-                <p className="text-xs text-slate-400">{dateTime(receipt.receivedAt)}</p>
-              </Info>
-            </dl>
-          </section>
+                }
+              />
+            )}
+            {r.notes && <Info label={t('grp.notes')} value={r.notes} wide />}
+          </dl>
+        </section>
+        <section
+          className="animate-rise rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-amber-50/40 p-5 shadow-sm"
+          style={{ animationDelay: '120ms' }}
+        >
+          <h2 className="mb-3 font-semibold text-slate-900">{t('grp.supplier')}</h2>
+          <p className="text-base font-semibold text-slate-900">{s.name}</p>
+          <p className="font-mono text-xs text-slate-400">{s.code}</p>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <Info label={t('grr.sup.taxId')} value={s.taxId} mono />
+            <Info label="RNE" value={s.rne} mono />
+            <Info label={t('grr.sup.phone')} value={s.phone} icon={Phone} />
+            <Info label="E-mail" value={s.email} icon={Mail} />
+            <Info label={t('grr.sup.address')} value={s.address} icon={MapPin} wide />
+          </dl>
+        </section>
+      </div>
 
-          {receipt.notes && (
-            <section
-              className="animate-rise rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              style={{ animationDelay: '200ms' }}
-            >
-              <h2 className="font-semibold text-slate-900">{t('grp.notes')}</h2>
-              <p className="mt-2 text-sm whitespace-pre-line text-slate-600">{receipt.notes}</p>
-            </section>
-          )}
-
-          <p
-            className="animate-rise flex gap-2 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 ring-1 ring-slate-200"
-            style={{ animationDelay: '240ms' }}
-          >
-            <Lock className="mt-0.5 size-4 shrink-0 text-slate-400" />{' '}
-            {receipt.status === 'DRAFT'
+      {/* Lines */}
+      <section
+        className="animate-rise overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+        style={{ animationDelay: '180ms' }}
+      >
+        <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-slate-900">
+          {t('grp.lines')}{' '}
+          <span className="text-sm font-normal text-slate-400">({r.lines.length})</span>
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[56rem] text-sm">
+            <thead className="bg-slate-50/80 text-left text-xs font-medium tracking-wide text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-2.5">{t('grp.col.product')}</th>
+                <th className="px-3 py-2.5 text-right">{t('grp.col.qty')}</th>
+                <th className="px-3 py-2.5 text-right">{t('grx.col.refused')}</th>
+                <th className="px-3 py-2.5">{t('grr.lot')}</th>
+                <th className="px-3 py-2.5">{t('grr.expiry')}</th>
+                <th className="px-3 py-2.5">{t('grr.quality')}</th>
+                <th className="px-3 py-2.5 text-right">{t('grp.col.cost')}</th>
+                <th className="px-4 py-2.5 text-right">{t('grp.col.value')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {r.lines.map((l, i) => {
+                const expired = Boolean(l.expiryDate) && l.expiryDate! < today;
+                return (
+                  <tr
+                    key={l.id}
+                    className="animate-rise align-top"
+                    style={{ animationDelay: `${200 + Math.min(i, 12) * 35}ms` }}
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/inventory/products/${l.product.id}`}
+                        className="font-medium text-slate-900 hover:text-orange-700"
+                      >
+                        {l.product.name}
+                      </Link>
+                      <p className="font-mono text-xs text-slate-400">
+                        {l.product.sku}
+                        {l.product.barcode && ` · ${l.product.barcode}`}
+                      </p>
+                    </td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                      {qty(l.quantity)}{' '}
+                      <span className="text-xs text-slate-400">{l.unit.code}</span>
+                      {Number(l.unitFactor) !== 1 && (
+                        <p className="text-[11px] text-slate-400">
+                          = {qty(l.baseQuantity)} {l.product.baseUnitCode}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                      {Number(l.rejectedQty) > 0 ? (
+                        <span className="font-medium text-red-600">{qty(l.rejectedQty)}</span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 font-mono text-xs text-slate-700">
+                      {l.lotNumber ?? <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {l.expiryDate ? (
+                        <span
+                          className={clsx(expired ? 'font-medium text-red-600' : 'text-slate-700')}
+                        >
+                          {date(l.expiryDate)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={clsx(
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1',
+                          l.quality === 'CONFORM'
+                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
+                            : 'bg-red-50 text-red-700 ring-red-600/20',
+                        )}
+                      >
+                        {l.quality === 'NON_CONFORM' && <AlertTriangle className="size-3" />}
+                        {l.quality === 'CONFORM' ? t('grr.conform') : t('grr.nonConform')}
+                      </span>
+                      {l.rejectReason && (
+                        <p className="mt-1 max-w-48 text-[11px] text-slate-500">{l.rejectReason}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap text-slate-600 tabular-nums">
+                      {money(l.unitCost)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-slate-900 tabular-nums">
+                      {money(l.value)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-100 bg-gradient-to-br from-slate-50 to-emerald-50/40 px-5 py-4">
+          <p className="flex max-w-md items-start gap-2 text-xs text-slate-500">
+            <Lock className="mt-0.5 size-4 shrink-0 text-slate-400" />
+            {r.status === 'DRAFT'
               ? t('grx.draftNote')
-              : receipt.status === 'CANCELLED'
+              : r.status === 'CANCELLED'
                 ? t('grx.cancelledNote')
                 : t('grp.locked')}
           </p>
-        </aside>
-      </div>
-      <SupplierInvoiceDialog
-        open={invoiceOpen}
-        onClose={() => setInvoiceOpen(false)}
-        receipt={{
-          id: receipt.id,
-          number: receipt.number,
-          orderNumber: receipt.purchaseOrder.number,
-          supplierInvoiceNumber: receipt.supplierInvoiceNumber,
-          supplierInvoiceDate: receipt.supplierInvoiceDate,
-        }}
-        onSaved={(r) => {
-          setInvoiceOpen(false);
-          setReceipt(r);
-          celebrate(t('inv.saved', { number: r.supplierInvoiceNumber ?? '' }));
-        }}
-      />
+          <div className="flex items-baseline gap-6">
+            <span className="font-semibold text-slate-900">{t('grp.total')}</span>
+            <span className="text-xl font-semibold text-orange-700 tabular-nums">
+              {money(r.value)}
+            </span>
+          </div>
+        </div>
+      </section>
+
       <Modal
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        title={t('grx.cancelTitle', { number: receipt.number })}
+        title={t('grx.cancelTitle', { number: r.number })}
         subtitle={t('grx.cancelText')}
         footer={
           <>
@@ -498,7 +438,7 @@ export default function GoodsReceiptPage() {
       <Modal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        title={t('grx.deleteTitle', { number: receipt.number })}
+        title={t('grx.deleteTitle', { number: r.number })}
         subtitle={t('grx.deleteText')}
         footer={
           <>
@@ -523,23 +463,27 @@ export default function GoodsReceiptPage() {
 }
 
 function Info({
-  icon: Icon,
   label,
-  children,
+  value,
+  sub,
+  mono,
+  wide,
+  icon: Icon,
 }: {
-  icon: typeof Truck;
   label: string;
-  children: React.ReactNode;
+  value: React.ReactNode;
+  sub?: string;
+  mono?: boolean;
+  wide?: boolean;
+  icon?: typeof Phone;
 }) {
   return (
-    <div className="flex gap-3">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-50 text-orange-600">
-        <Icon className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <dt className="text-xs text-slate-500">{label}</dt>
-        <dd className="text-slate-800">{children}</dd>
-      </div>
+    <div className={clsx('min-w-0', wide && 'col-span-2')}>
+      <dt className="flex items-center gap-1 text-xs text-slate-400">
+        {Icon && <Icon className="size-3" />} {label}
+      </dt>
+      <dd className={clsx('text-slate-800', mono && 'font-mono text-xs')}>{value || '—'}</dd>
+      {sub && <p className="text-xs text-slate-400">{sub}</p>}
     </div>
   );
 }

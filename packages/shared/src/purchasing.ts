@@ -193,10 +193,19 @@ export interface GoodsReceiptListItem {
   billing: 'none' | 'partial' | 'full';
 }
 
+export const RECEIPT_QUALITIES = ['CONFORM', 'NON_CONFORM'] as const;
+export type ReceiptQuality = (typeof RECEIPT_QUALITIES)[number];
+
 export interface GoodsReceiptLineDto {
   id: string;
   purchaseOrderLineId: string;
-  product: { id: string; sku: string; name: string; baseUnitCode: string };
+  product: {
+    id: string;
+    sku: string;
+    name: string;
+    baseUnitCode: string;
+    barcode: string | null;
+  };
   unit: { id: string; code: string };
   unitFactor: string;
   /** In the order line's unit */
@@ -214,9 +223,28 @@ export interface GoodsReceiptLineDto {
   /** Ordered and already received (posted) on the order line, for drafts */
   orderedQty: string;
   receivedOnOrder: string;
+  lotNumber: string | null;
+  /** YYYY-MM-DD */
+  expiryDate: string | null;
+  quality: ReceiptQuality;
+}
+
+/** Supplier details printed on the receipt */
+export interface ReceiptSupplierInfo {
+  id: string;
+  code: string;
+  name: string;
+  taxId: string | null;
+  rne: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  paymentTermDays: number;
 }
 
 export interface GoodsReceiptDetail extends GoodsReceiptListItem {
+  supplierInfo: ReceiptSupplierInfo;
+  purchaseOrderDate: string;
   notes: string | null;
   postedAt: string | null;
   cancelledAt: string | null;
@@ -260,7 +288,13 @@ export interface GoodsReceiptLineInput {
   quantity: string;
   /** Refused at the door; does not enter the stock */
   rejectedQty?: string;
+  /** Why goods were refused, or the observation of a non-conform line */
   rejectReason?: string | null;
+  lotNumber?: string | null;
+  /** YYYY-MM-DD */
+  expiryDate?: string | null;
+  /** Default CONFORM; NON_CONFORM needs an observation */
+  quality?: ReceiptQuality;
 }
 
 /** GET / PATCH /purchasing/receipts/settings */

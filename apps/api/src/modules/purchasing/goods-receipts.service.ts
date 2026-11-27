@@ -61,10 +61,36 @@ const LIST_INCLUDE = {
 
 const DETAIL_INCLUDE = {
   ...LIST_INCLUDE,
+  purchaseOrder: {
+    select: {
+      id: true,
+      number: true,
+      orderDate: true,
+      supplier: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          taxId: true,
+          rne: true,
+          phone: true,
+          email: true,
+          address: true,
+          paymentTermDays: true,
+        },
+      },
+    },
+  },
   lines: {
     include: {
       product: {
-        select: { id: true, sku: true, name: true, baseUnit: { select: { code: true } } },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          barcode: true,
+          baseUnit: { select: { code: true } },
+        },
       },
       purchaseOrderLine: {
         select: {
@@ -801,8 +827,18 @@ export function billingState(
 function toDetail(r: DetailRow, invoiceEditable: boolean, tolerance: string): GoodsReceiptDetail {
   const bills = new Map<string, { id: string; number: string; status: string }>();
   for (const l of r.lines) for (const il of l.invoiceLines) bills.set(il.invoice.id, il.invoice);
+  const sup = r.purchaseOrder.supplier;
   return {
-    ...toListItem(r),
+    ...toListItem({
+      ...r,
+      purchaseOrder: {
+        id: r.purchaseOrder.id,
+        number: r.purchaseOrder.number,
+        supplier: { id: sup.id, code: sup.code, name: sup.name },
+      },
+    }),
+    supplierInfo: sup,
+    purchaseOrderDate: toDateString(r.purchaseOrder.orderDate),
     invoiceEditable,
     notes: r.notes,
     postedAt: r.postedAt?.toISOString() ?? null,
@@ -821,6 +857,7 @@ function toDetail(r: DetailRow, invoiceEditable: boolean, tolerance: string): Go
           sku: l.product.sku,
           name: l.product.name,
           baseUnitCode: l.product.baseUnit.code,
+          barcode: l.product.barcode,
         },
         unit: l.purchaseOrderLine.unit,
         unitFactor: l.purchaseOrderLine.unitFactor.toFixed(4),
@@ -833,6 +870,9 @@ function toDetail(r: DetailRow, invoiceEditable: boolean, tolerance: string): Go
         billedQty: l.billedQty.toFixed(4),
         orderedQty: l.purchaseOrderLine.quantity.toFixed(4),
         receivedOnOrder: l.purchaseOrderLine.receivedQty.toFixed(4),
+        lotNumber: l.lotNumber,
+        expiryDate: l.expiryDate ? toDateString(l.expiryDate) : null,
+        quality: l.quality,
       })),
   };
 }
@@ -846,6 +886,9 @@ interface CheckedLine {
   quantity: Prisma.Decimal;
   rejectedQty: Prisma.Decimal;
   rejectReason: string | null;
+  lotNumber: string | null;
+  expiryDate: Date | null;
+  quality: 'CONFORM' | 'NON_CONFORM';
   baseQuantity: Prisma.Decimal;
   unitCost: Prisma.Decimal;
   value: Prisma.Decimal;
@@ -903,6 +946,9 @@ function checkLines(
     quantity: string;
     rejectedQty?: string;
     rejectReason?: string | null;
+    lotNumber?: string | null;
+    expiryDate?: string | null;
+    quality?: 'CONFORM' | 'NON_CONFORM';
   }[],
   tolerance: Prisma.Decimal,
 ): CheckedLine[] {
@@ -935,6 +981,11 @@ function checkLines(
     if (D(l.rejectedQty ?? 0).gt(0) && !l.rejectReason) {
       errors.push(`Line ${line.lineNo} (${line.product.sku}): enter why goods were refused`);
     }
+    if (l.quality === 'NON_CONFORM' && !l.rejectReason) {
+      errors.push(
+        `Line ${line.lineNo} (${line.product.sku}): enter an observation for a non-conform line`,
+      );
+    }
   }
   if (errors.length) throw new BadRequestException([...new Set(errors)]);
   if (!wanted.length) throw new BadRequestException('Enter a quantity on at least one line');
@@ -948,7 +999,11 @@ function checkLines(
           line,
           quantity: D(l.quantity),
           rejectedQty: rejected,
-          rejectReason: rejected.gt(0) ? (l.rejectReason ?? null) : null,
+          rejectReason:
+            rejected.gt(0) || l.quality === 'NON_CONFORM' ? (l.rejectReason ?? null) : null,
+          lotNumber: l.lotNumber ?? null,
+          expiryDate: l.expiryDate ? new Date(`${l.expiryDate}T00:00:00.000Z`) : null,
+          quality: l.quality ?? 'CONFORM',
           ...receiptLineAmounts(l.quantity, line.unitPrice, line.discountPct, line.unitFactor),
         };
       })
@@ -973,6 +1028,9 @@ function toLineData(l: CheckedLine) {
     value: l.value,
     rejectedQty: l.rejectedQty,
     rejectReason: l.rejectReason,
+    lotNumber: l.lotNumber,
+    expiryDate: l.expiryDate,
+    quality: l.quality,
   };
 }
 
@@ -1034,6 +1092,9 @@ async function postReceipt(tx: Tx, id: string, user: RequestUser): Promise<void>
       quantity: l.quantity.toString(),
       rejectedQty: l.rejectedQty.toString(),
       rejectReason: l.rejectReason,
+      lotNumber: l.lotNumber,
+      expiryDate: l.expiryDate ? toDateString(l.expiryDate) : null,
+      quality: l.quality,
     })),
     await tolerancePct(tx),
   );

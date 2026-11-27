@@ -23,7 +23,7 @@ import type {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { RequestUser } from '../../common/types/request-user';
-import { XLSX_MIME } from '../../common/xlsx';
+import { XLSX_MIME, writeXlsx } from '../../common/xlsx';
 import {
   CancelGoodsReceiptDto,
   CreateGoodsReceiptDto,
@@ -110,6 +110,110 @@ export class GoodsReceiptsController {
     return new StreamableFile(file, {
       type: XLSX_MIME,
       disposition: `attachment; filename="goods-receipts-${date}.xlsx"`,
+    });
+  }
+
+  @Get(':id/export')
+  @RequirePermissions('purchasing.order.read')
+  @ApiOperation({ summary: 'Download one goods receipt as Excel (header + lines)' })
+  async exportOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('lang') lang?: string,
+  ): Promise<StreamableFile> {
+    const r = await this.receipts.get(id);
+    const fr = lang === 'fr';
+    const s = r.supplierInfo;
+    const num = (v: string) => Number(v);
+    const quality = (q: string) =>
+      q === 'NON_CONFORM' ? (fr ? 'Non conforme' : 'Non-conform') : fr ? 'Conforme' : 'Conform';
+    const info: [string, string | number | null][] = [
+      [fr ? 'Bon de réception' : 'Goods receipt', r.number],
+      [fr ? 'Statut' : 'Status', r.status],
+      [fr ? 'Date de réception' : 'Received on', r.receivedAt.slice(0, 10)],
+      [fr ? 'Bon de commande' : 'Purchase order', r.purchaseOrder.number],
+      [fr ? 'Date de commande' : 'Order date', r.purchaseOrderDate],
+      [fr ? 'BL fournisseur' : 'Supplier delivery note', r.supplierRef],
+      [fr ? 'Dépôt' : 'Warehouse', `${r.warehouse.code} · ${r.warehouse.name}`],
+      [fr ? 'Fournisseur' : 'Supplier', `${s.code} · ${s.name}`],
+      [fr ? 'Matricule fiscal' : 'Tax ID', s.taxId],
+      ['RNE', s.rne],
+      [fr ? 'Téléphone' : 'Phone', s.phone],
+      ['E-mail', s.email],
+      [fr ? 'Adresse' : 'Address', s.address],
+      [fr ? 'Reçu par' : 'Received by', r.createdBy.fullName],
+      [fr ? 'Valeur HT' : 'Value excl. VAT', num(r.value)],
+      [fr ? 'Notes' : 'Notes', r.notes],
+    ];
+    const cols = fr
+      ? [
+          'Réf.',
+          'Article',
+          'Code-barres',
+          'Unité',
+          'Reçu',
+          'Refusé',
+          'Entré en stock',
+          'Lot',
+          'Péremption',
+          'Qualité',
+          'Observation',
+          'Coût unitaire',
+          'Valeur HT',
+        ]
+      : [
+          'SKU',
+          'Product',
+          'Barcode',
+          'Unit',
+          'Received',
+          'Refused',
+          'Into stock',
+          'Lot',
+          'Expiry',
+          'Quality',
+          'Observation',
+          'Unit cost',
+          'Value excl. VAT',
+        ];
+    const file = await writeXlsx([
+      {
+        name: r.number.slice(0, 31),
+        rows: [
+          cols,
+          ...r.lines.map((l) => [
+            l.product.sku,
+            l.product.name,
+            l.product.barcode,
+            l.unit.code,
+            num(l.quantity),
+            num(l.rejectedQty) || null,
+            num(l.baseQuantity),
+            l.lotNumber,
+            l.expiryDate,
+            quality(l.quality),
+            l.rejectReason,
+            num(l.unitCost),
+            num(l.value),
+          ]),
+        ],
+        widths: [12, 32, 16, 8, 10, 10, 12, 14, 12, 14, 28, 12, 14],
+        numFmt: {
+          4: '#,##0.####',
+          5: '#,##0.####',
+          6: '#,##0.####',
+          11: '#,##0.000#',
+          12: '#,##0.000',
+        },
+      },
+      {
+        name: fr ? 'En-tête' : 'Header',
+        rows: [[fr ? 'Champ' : 'Field', fr ? 'Valeur' : 'Value'], ...info],
+        widths: [26, 48],
+      },
+    ]);
+    return new StreamableFile(file, {
+      type: XLSX_MIME,
+      disposition: `attachment; filename="${r.number}.xlsx"`,
     });
   }
 

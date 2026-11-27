@@ -20,6 +20,8 @@ import {
 import {
   DELIVERY_STATUSES,
   GOODS_RECEIPT_STATUSES,
+  RECEIPT_QUALITIES,
+  type ReceiptQuality,
   type DeliveryStatusFilter,
   type GoodsReceiptStatusFilter,
 } from '@erp/shared';
@@ -64,6 +66,24 @@ export class GoodsReceiptLineDto {
   @IsString()
   @MaxLength(200)
   rejectReason?: string | null;
+
+  @ApiPropertyOptional({ example: 'L2611-04', description: "Supplier's lot / batch number" })
+  @Transform(trimToNull)
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  lotNumber?: string | null;
+
+  @ApiPropertyOptional({ example: '2027-06-30', description: 'Best-before / expiry date' })
+  @Transform(trimToNull)
+  @IsOptional()
+  @IsDateString({ strict: true })
+  expiryDate?: string | null;
+
+  @ApiPropertyOptional({ enum: RECEIPT_QUALITIES, default: 'CONFORM' })
+  @IsOptional()
+  @IsIn(RECEIPT_QUALITIES)
+  quality?: ReceiptQuality;
 }
 
 export class CreateGoodsReceiptDto {

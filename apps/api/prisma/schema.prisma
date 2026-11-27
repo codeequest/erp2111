@@ -549,6 +549,11 @@ model PurchaseOrderLine {
   @@map("purchase_order_lines")
 }
 
+enum ReceiptQuality {
+  CONFORM
+  NON_CONFORM
+}
+
 enum GoodsReceiptStatus {
   /// Editable, no stock movement yet
   DRAFT
@@ -591,23 +596,29 @@ model GoodsReceipt {
 }
 
 model GoodsReceiptLine {
-  id                  String  @id @default(uuid()) @db.Uuid
-  goodsReceiptId      String  @map("goods_receipt_id") @db.Uuid
-  purchaseOrderLineId String  @map("purchase_order_line_id") @db.Uuid
-  productId           String  @map("product_id") @db.Uuid
+  id                  String         @id @default(uuid()) @db.Uuid
+  goodsReceiptId      String         @map("goods_receipt_id") @db.Uuid
+  purchaseOrderLineId String         @map("purchase_order_line_id") @db.Uuid
+  productId           String         @map("product_id") @db.Uuid
   /// In the PO line's unit
-  quantity            Decimal @db.Decimal(18, 4)
+  quantity            Decimal        @db.Decimal(18, 4)
   /// quantity × PO unit factor: what entered the stock
-  baseQuantity        Decimal @default(0) @map("base_quantity") @db.Decimal(18, 4)
+  baseQuantity        Decimal        @default(0) @map("base_quantity") @db.Decimal(18, 4)
   /// Cost per base unit: PO price after discount, before VAT (used for the average cost)
-  unitCost            Decimal @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  unitCost            Decimal        @default(0) @map("unit_cost") @db.Decimal(18, 4)
   /// quantity × PO price after discount, before VAT, to the millime
-  value               Decimal @default(0) @db.Decimal(18, 3)
+  value               Decimal        @default(0) @db.Decimal(18, 3)
   /// Refused at the door (damaged, wrong item…), in the PO line's unit: never enters the stock
-  rejectedQty         Decimal @default(0) @map("rejected_qty") @db.Decimal(18, 4)
-  rejectReason        String? @map("reject_reason")
+  rejectedQty         Decimal        @default(0) @map("rejected_qty") @db.Decimal(18, 4)
+  rejectReason        String?        @map("reject_reason")
   /// Quantity already on posted supplier bills, in the PO line's unit
-  billedQty           Decimal @default(0) @map("billed_qty") @db.Decimal(18, 4)
+  billedQty           Decimal        @default(0) @map("billed_qty") @db.Decimal(18, 4)
+  /// Supplier lot / batch number of the goods received on this line
+  lotNumber           String?        @map("lot_number")
+  /// Best-before / expiry date printed on the goods
+  expiryDate          DateTime?      @map("expiry_date") @db.Date
+  /// Quality check at reception; NON_CONFORM needs an observation (reject_reason)
+  quality             ReceiptQuality @default(CONFORM)
 
   goodsReceipt      GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
   purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])
