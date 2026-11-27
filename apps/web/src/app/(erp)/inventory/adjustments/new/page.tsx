@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatQty } from '@/lib/format';
 import { AccessDenied, Breadcrumbs } from '@/components/page-header';
+import { lookupBarcode } from '@/components/products/barcode-scan-box';
 
 interface Line {
   productId: string;
@@ -535,6 +536,24 @@ function ProductPicker({
     setResults([]);
   };
 
+  /**
+   * Enter: a scanner types the code and presses Enter at once, before the search
+   * answers. Try the code as a barcode (product or pack size) first, then fall back
+   * to the highlighted search result.
+   */
+  const enter = async () => {
+    const q = query.trim();
+    if (!q) return;
+    const match = await lookupBarcode(q);
+    if (match && warehouseId) {
+      const qs = new URLSearchParams({ warehouseId, search: match.product.sku, pageSize: '8' });
+      const res = await api<StockLevelsResponse>(`/inventory/stock/levels?${qs}`).catch(() => null);
+      const row = res?.items.find((r) => r.product.id === match.product.id);
+      if (row) return pick(row);
+    }
+    if (results[active]) pick(results[active]);
+  };
+
   return (
     <div ref={boxRef} className="relative max-w-md">
       <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
@@ -548,9 +567,9 @@ function ProductPicker({
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, results.length - 1));
           if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0));
-          if (e.key === 'Enter' && results[active]) {
+          if (e.key === 'Enter') {
             e.preventDefault();
-            pick(results[active]);
+            void enter();
           }
           if (e.key === 'Escape') setOpen(false);
         }}

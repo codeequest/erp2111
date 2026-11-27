@@ -28,6 +28,8 @@ import {
   type DiscountTypeCode,
   type SupplierDetail,
   type SupplierListItem,
+  type BarcodeMatch,
+  type ProductDetail,
 } from '@erp/shared';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
@@ -50,6 +52,7 @@ import {
   localToday,
   useCurrency,
 } from './ui';
+import { BarcodeScanBox } from '@/components/products/barcode-scan-box';
 
 const DECIMAL_4 = /^\d{0,14}([.,]\d{0,4})?$/;
 
@@ -317,6 +320,55 @@ export function BillForm({
     .map((r) => ({ ...r, lines: r.lines.filter((l) => !onBill.has(l.goodsReceiptLineId)) }))
     .filter((r) => r.lines.length > 0);
 
+  /**
+   * A scanned product: its received line not billed yet comes first; otherwise one more
+   * on its free line; otherwise a new free line (VAT of the product, last purchase price).
+   */
+  async function onScan(m: BarcodeMatch): Promise<string | void> {
+    const pid = m.product.id;
+    const unitId = m.packUnit?.unit.id;
+    const received = available
+      .flatMap((r) => r.lines)
+      .find((l) => l.product.id === pid && (!unitId || l.unit.id === unitId));
+    if (received) {
+      setLines((ls) => [...ls, receiptLineToForm(received)]);
+      return;
+    }
+    const free = lines.find((l) => l.productId === pid && !l.goodsReceiptLineId);
+    if (free) {
+      setLine(free.key, { quantity: String(Number(free.quantity || 0) + 1) });
+      return;
+    }
+    if (lines.some((l) => l.productId === pid && l.goodsReceiptLineId)) {
+      return t('bill.scanAlready', { name: m.product.name });
+    }
+    let taxRateId: string | null = lookups?.taxRates[0]?.id ?? null;
+    try {
+      const p = await api<ProductDetail>(`/inventory/products/${pid}`);
+      taxRateId = p.taxRate?.id ?? null;
+    } catch {
+      /* keep the default rate */
+    }
+    const factor = Number(m.packUnit?.factor ?? 1);
+    const cost = Number(m.product.lastPurchaseCost ?? 0) * factor;
+    setLines((ls) => [
+      ...ls,
+      {
+        key: newKey(),
+        goodsReceiptLineId: null,
+        productId: pid,
+        description: m.packUnit
+          ? `${m.product.name} (${m.packUnit.unit.code} ×${Number(m.packUnit.factor)})`
+          : m.product.name,
+        quantity: '1',
+        unitPrice:
+          cost > 0 && currency === lookups?.companyCurrency ? String(Number(cost.toFixed(4))) : '',
+        discountPct: '',
+        taxRateId,
+      },
+    ]);
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-4">
       <InvoicingHero
@@ -526,33 +578,41 @@ export function BillForm({
         className="animate-rise overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
         style={{ animationDelay: '160ms' }}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
           <h2 className="font-semibold text-slate-900">
             {t('bill.lines')}{' '}
             <span className="text-sm font-normal text-slate-400">({lines.length})</span>
           </h2>
-          <button
-            type="button"
-            className={btnSecondary}
-            disabled={Boolean(saving)}
-            onClick={() =>
-              setLines((ls) => [
-                ...ls,
-                {
-                  key: newKey(),
-                  goodsReceiptLineId: null,
-                  productId: null,
-                  description: '',
-                  quantity: '1',
-                  unitPrice: '',
-                  discountPct: '',
-                  taxRateId: lookups?.taxRates[0]?.id ?? null,
-                },
-              ])
-            }
-          >
-            <Plus className="size-4" /> {t('bill.addFree')}
-          </button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <BarcodeScanBox
+              onMatch={onScan}
+              disabled={Boolean(saving) || !lookups}
+              placeholder={t('bill.scanPh')}
+              notFound={t('bill.scanUnknown')}
+            />
+            <button
+              type="button"
+              className={btnSecondary}
+              disabled={Boolean(saving)}
+              onClick={() =>
+                setLines((ls) => [
+                  ...ls,
+                  {
+                    key: newKey(),
+                    goodsReceiptLineId: null,
+                    productId: null,
+                    description: '',
+                    quantity: '1',
+                    unitPrice: '',
+                    discountPct: '',
+                    taxRateId: lookups?.taxRates[0]?.id ?? null,
+                  },
+                ])
+              }
+            >
+              <Plus className="size-4" /> {t('bill.addFree')}
+            </button>
+          </div>
         </div>
         {lines.length === 0 ? (
           <div className="animate-fade flex flex-col items-center px-6 py-12 text-center">

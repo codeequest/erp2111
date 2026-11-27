@@ -123,6 +123,9 @@ export const invoicingEn = {
   'bill.invOnReceipt': 'Supplier invoice {number} recorded on the receipt',
   'bill.lines': 'Bill lines',
   'bill.addFree': 'Free line',
+  'bill.scanPh': 'Scan a barcode (Enter)…',
+  'bill.scanUnknown': 'No product with the barcode {code}',
+  'bill.scanAlready': '{name}: everything received is already on the bill',
   'bill.noLinesTitle': 'No lines yet',
   'bill.noLinesText':
     'Add received goods above, or a free line for a service, transport or another fee.',
@@ -338,6 +341,9 @@ export const invoicingFr: Record<keyof typeof invoicingEn, string> = {
   'bill.invOnReceipt': 'Facture fournisseur {number} saisie sur la réception',
   'bill.lines': 'Lignes de la facture',
   'bill.addFree': 'Ligne libre',
+  'bill.scanPh': 'Scanner un code-barres (Entrée)…',
+  'bill.scanUnknown': 'Aucun article avec le code-barres {code}',
+  'bill.scanAlready': '{name} : tout le reçu est déjà sur la facture',
   'bill.noLinesTitle': 'Aucune ligne pour l’instant',
   'bill.noLinesText':
     'Ajoutez la marchandise reçue ci-dessus, ou une ligne libre pour un service, un transport ou d’autres frais.',

@@ -25,6 +25,7 @@ import type {
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
+import { lookupBarcode } from '@/components/products/barcode-scan-box';
 import {
   Breadcrumbs,
   ErrorBox,
@@ -343,7 +344,14 @@ function PriceEditor({
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search products…"
+            onKeyDown={async (e) => {
+              // A scanned pack barcode is not in the product search: resolve it to its SKU.
+              if (e.key !== 'Enter' || !searchInput.trim()) return;
+              e.preventDefault();
+              const match = await lookupBarcode(searchInput);
+              if (match) setSearchInput(match.product.sku);
+            }}
+            placeholder="Search products or scan a barcode…"
             aria-label="Search products"
             className={clsx(inputClass, 'py-1.5 pl-9')}
           />
