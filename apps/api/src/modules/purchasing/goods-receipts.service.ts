@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type {
+  AttachableReceipt,
   DeliveryListItem,
   DeliveryStatus,
   GoodsReceiptDetail,
@@ -22,6 +23,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { toAuditJson } from '../inventory/prisma-errors';
 import { lockBalance, postMove } from '../inventory/stock-ledger';
 import {
+  AttachReceiptDto,
   CancelGoodsReceiptDto,
   CreateGoodsReceiptDto,
   ListDeliveriesQueryDto,
@@ -36,7 +38,6 @@ import {
   averageCostAfterReversal,
   canReceive,
   receiptLineAmounts,
-  receivableLimit,
   statusAfterCancelledReceipt,
   statusAfterReceipt,
   toDateString,
@@ -47,13 +48,8 @@ type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
 const LIST_INCLUDE = {
-  purchaseOrder: {
-    select: {
-      id: true,
-      number: true,
-      supplier: { select: { id: true, code: true, name: true } },
-    },
-  },
+  supplier: { select: { id: true, code: true, name: true } },
+  purchaseOrder: { select: { id: true, number: true } },
   warehouse: { select: { id: true, code: true, name: true } },
   createdBy: { select: { id: true, fullName: true } },
   lines: { select: { value: true, quantity: true, billedQty: true } },
@@ -61,27 +57,22 @@ const LIST_INCLUDE = {
 
 const DETAIL_INCLUDE = {
   ...LIST_INCLUDE,
-  purchaseOrder: {
+  supplier: {
     select: {
       id: true,
-      number: true,
-      orderDate: true,
-      supplier: {
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          taxId: true,
-          rne: true,
-          phone: true,
-          email: true,
-          address: true,
-          paymentTermDays: true,
-        },
-      },
+      code: true,
+      name: true,
+      taxId: true,
+      rne: true,
+      phone: true,
+      email: true,
+      address: true,
+      paymentTermDays: true,
     },
   },
+  purchaseOrder: { select: { id: true, number: true, orderDate: true } },
   lines: {
+    orderBy: { lineNo: 'asc' },
     include: {
       product: {
         select: {
@@ -92,15 +83,7 @@ const DETAIL_INCLUDE = {
           baseUnit: { select: { code: true } },
         },
       },
-      purchaseOrderLine: {
-        select: {
-          lineNo: true,
-          unitFactor: true,
-          quantity: true,
-          receivedQty: true,
-          unit: { select: { id: true, code: true } },
-        },
-      },
+      unit: { select: { id: true, code: true } },
       invoiceLines: {
         where: { invoice: { status: { not: 'CANCELLED' } } },
         select: { invoice: { select: { id: true, number: true, status: true } } },
@@ -232,57 +215,32 @@ export class GoodsReceiptsService {
       include: DETAIL_INCLUDE,
     });
     if (!row) throw new NotFoundException('Goods receipt not found');
-    // The invoice can be recorded on the receipt that completed a delivered order.
-    const [order, last] = await Promise.all([
-      this.prisma.purchaseOrder.findUniqueOrThrow({
-        where: { id: row.purchaseOrderId },
-        select: { status: true },
-      }),
-      this.prisma.goodsReceipt.findFirst({
-        where: { purchaseOrderId: row.purchaseOrderId, status: 'POSTED' },
-        orderBy: [{ receivedAt: 'desc' }, { number: 'desc' }],
-        select: { id: true },
-      }),
-    ]);
     const settings = await this.prisma.companySettings.findUnique({
       where: { id: 1 },
       select: { receiptTolerancePct: true },
     });
-    return toDetail(
-      row,
-      row.status === 'POSTED' && order.status === 'RECEIVED' && last?.id === row.id,
-      (settings?.receiptTolerancePct ?? D(0)).toFixed(2),
-    );
+    return toDetail(row, (settings?.receiptTolerancePct ?? D(0)).toFixed(2));
   }
 
   /**
-   * Creates a receipt against a confirmed order. By default it is posted at once
-   * (stock IN, average and last purchase cost, received quantities and order status);
-   * with `asDraft` it is only saved, and nothing moves until it is posted.
+   * Creates a receipt for a supplier with the products received (entered by hand or
+   * scanned). Posted at once by default (stock IN, costs); with `asDraft` it is only
+   * saved, and nothing moves until it is posted.
    */
   async create(dto: CreateGoodsReceiptDto, user: RequestUser): Promise<GoodsReceiptDetail> {
-    const header = checkHeader(dto);
+    const day = checkDate(dto.receivedDate);
     const id = await this.prisma.$transaction(async (tx) => {
-      const order = await lockOrder(tx, dto.purchaseOrderId);
-      assertReceivable(order);
-      if (header.day < toDateString(order.orderDate)) {
-        throw new BadRequestException('The reception date cannot be before the order date');
-      }
-      const tolerance = await tolerancePct(tx);
-      const lines = checkLines(order, dto.lines, tolerance);
-
+      const supplier = await activeSupplier(tx, dto.supplierId);
+      const warehouseId = await pickWarehouse(tx, dto.warehouseId);
+      const lines = await checkLines(tx, dto.lines);
       const receipt = await tx.goodsReceipt.create({
         data: {
           number: draftNumber(),
           status: 'DRAFT',
-          purchaseOrderId: order.id,
-          warehouseId: order.warehouseId,
-          receivedAt: header.receivedAt,
+          supplierId: supplier.id,
+          warehouseId,
+          receivedAt: day.receivedAt,
           supplierRef: dto.supplierRef ?? null,
-          supplierInvoiceNumber: header.invoiceNumber,
-          supplierInvoiceDate: header.invoiceDate
-            ? new Date(`${header.invoiceDate}T00:00:00.000Z`)
-            : null,
           notes: dto.notes ?? null,
           createdById: user.id,
           lines: { createMany: { data: lines.map(toLineData) } },
@@ -290,9 +248,9 @@ export class GoodsReceiptsService {
       });
       await audit(tx, user, 'create', 'GoodsReceipt', receipt.id, null, {
         status: 'DRAFT',
-        purchaseOrder: order.number,
+        supplier: supplier.name,
         supplierRef: dto.supplierRef ?? null,
-        receivedAt: header.receivedAt.toISOString(),
+        receivedAt: day.receivedAt.toISOString(),
         lines: auditLines(lines),
       } as Prisma.InputJsonObject);
       if (!dto.asDraft) await postReceipt(tx, receipt.id, user);
@@ -301,66 +259,39 @@ export class GoodsReceiptsService {
     return this.get(id);
   }
 
-  /** Replaces the header and the lines of a draft (same order). */
+  /** Replaces the header and the lines of a draft. */
   async update(
     id: string,
     dto: UpdateGoodsReceiptDto,
     user: RequestUser,
   ): Promise<GoodsReceiptDetail> {
-    const header = checkHeader(dto);
+    const day = checkDate(dto.receivedDate);
     await this.prisma.$transaction(async (tx) => {
       const draft = await lockReceipt(tx, id);
       if (draft.status !== 'DRAFT') {
         throw new ConflictException(`${draft.number} is posted: it cannot be changed any more`);
       }
-      if (dto.purchaseOrderId !== draft.purchaseOrderId) {
-        throw new BadRequestException('A draft receipt cannot be moved to another order');
-      }
-      const order = await lockOrder(tx, draft.purchaseOrderId);
-      assertReceivable(order);
-      if (header.day < toDateString(order.orderDate)) {
-        throw new BadRequestException('The reception date cannot be before the order date');
-      }
-      const lines = checkLines(order, dto.lines, await tolerancePct(tx));
-      const before = await tx.goodsReceipt.findUniqueOrThrow({
-        where: { id },
-        include: { lines: { include: { product: { select: { sku: true } } } } },
-      });
+      const supplier = await activeSupplier(tx, dto.supplierId);
+      const warehouseId = await pickWarehouse(tx, dto.warehouseId);
+      const lines = await checkLines(tx, dto.lines);
       await tx.goodsReceiptLine.deleteMany({ where: { goodsReceiptId: id } });
       await tx.goodsReceipt.update({
         where: { id },
         data: {
-          receivedAt: header.receivedAt,
+          supplierId: supplier.id,
+          warehouseId,
+          receivedAt: day.receivedAt,
           supplierRef: dto.supplierRef ?? null,
-          supplierInvoiceNumber: header.invoiceNumber,
-          supplierInvoiceDate: header.invoiceDate
-            ? new Date(`${header.invoiceDate}T00:00:00.000Z`)
-            : null,
           notes: dto.notes ?? null,
           lines: { createMany: { data: lines.map(toLineData) } },
         },
       });
-      await audit(
-        tx,
-        user,
-        'update',
-        'GoodsReceipt',
-        id,
-        toAuditJson({
-          receivedAt: before.receivedAt.toISOString(),
-          supplierRef: before.supplierRef,
-          lines: before.lines.map((l) => ({
-            sku: l.product.sku,
-            quantity: l.quantity.toString(),
-            rejectedQty: l.rejectedQty.toString(),
-          })),
-        }) as Prisma.InputJsonObject,
-        {
-          receivedAt: header.receivedAt.toISOString(),
-          supplierRef: dto.supplierRef ?? null,
-          lines: auditLines(lines),
-        } as Prisma.InputJsonObject,
-      );
+      await audit(tx, user, 'update', 'GoodsReceipt', id, { number: draft.number }, {
+        supplier: supplier.name,
+        receivedAt: day.receivedAt.toISOString(),
+        supplierRef: dto.supplierRef ?? null,
+        lines: auditLines(lines),
+      } as Prisma.InputJsonObject);
     });
     return this.get(id);
   }
@@ -384,10 +315,11 @@ export class GoodsReceiptsService {
   }
 
   /**
-   * Cancels a posted receipt: the goods leave the stock again (reversing moves, the
-   * ledger is never rewritten), the order gets its quantities back and the costs are
-   * recomputed. Refused once the receipt is on a supplier bill, or when the stock
-   * would become negative (unless the settings allow it).
+   * Cancels a posted receipt: the goods leave the stock again (reversing moves; the
+   * ledger is never rewritten) and the costs are recomputed. When it is attached to an
+   * order, it is detached first (the order gets its quantities back). Refused once the
+   * receipt is on a supplier bill, or when the stock would become negative (unless the
+   * settings allow it).
    */
   async cancel(
     id: string,
@@ -402,14 +334,12 @@ export class GoodsReceiptsService {
       if (head.status === 'CANCELLED') {
         throw new ConflictException(`${head.number} is already cancelled`);
       }
-      const order = await lockOrder(tx, head.purchaseOrderId);
       const receipt = await tx.goodsReceipt.findUniqueOrThrow({
         where: { id },
         include: {
           lines: {
             include: {
               product: { select: { sku: true } },
-              purchaseOrderLine: { select: { lineNo: true } },
               invoiceLines: {
                 where: { invoice: { status: { not: 'CANCELLED' } } },
                 select: { invoice: { select: { number: true } } },
@@ -426,6 +356,7 @@ export class GoodsReceiptsService {
           `${receipt.number} is on supplier bill ${bills.join(', ')}: cancel or correct the bill first`,
         );
       }
+      if (receipt.purchaseOrderId) await detachFromOrder(tx, receipt.id, user);
 
       const settings = await tx.companySettings.findUnique({
         where: { id: 1 },
@@ -434,18 +365,10 @@ export class GoodsReceiptsService {
       const moving = receipt.lines
         .filter((l) => l.quantity.gt(0))
         .sort((a, b) =>
-          a.productId === b.productId
-            ? a.purchaseOrderLine.lineNo - b.purchaseOrderLine.lineNo
-            : a.productId < b.productId
-              ? -1
-              : 1,
+          a.productId === b.productId ? a.lineNo - b.lineNo : a.productId < b.productId ? -1 : 1,
         );
       const productIds = [...new Set(moving.map((l) => l.productId))];
-      if (productIds.length) {
-        await tx.$queryRaw`
-          SELECT id FROM products WHERE id IN (${Prisma.join(productIds.map((p) => Prisma.sql`${p}::uuid`))})
-          ORDER BY id FOR UPDATE`;
-      }
+      await lockProducts(tx, productIds);
 
       const errors: string[] = [];
       const costChanges: Record<string, { before: string; after: string }> = {};
@@ -496,10 +419,6 @@ export class GoodsReceiptsService {
           },
           after,
         );
-        await tx.purchaseOrderLine.update({
-          where: { id: l.purchaseOrderLineId },
-          data: { receivedQty: { decrement: l.quantity } },
-        });
       }
       if (errors.length) {
         throw new BadRequestException([
@@ -507,21 +426,11 @@ export class GoodsReceiptsService {
           ...errors,
         ]);
       }
-
-      const lines = await tx.purchaseOrderLine.findMany({
-        where: { purchaseOrderId: order.id },
-        select: { quantity: true, receivedQty: true },
-      });
-      const status = statusAfterCancelledReceipt(lines);
-      if (status !== order.status) {
-        await tx.purchaseOrder.update({ where: { id: order.id }, data: { status } });
-      }
       await tx.goodsReceipt.update({
         where: { id },
         data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: dto.reason },
       });
       const lastCost = await refreshLastPurchaseCost(tx, productIds);
-
       await audit(
         tx,
         user,
@@ -536,15 +445,142 @@ export class GoodsReceiptsService {
           lastPurchaseCost: lastCost,
         }) as Prisma.InputJsonObject,
       );
+    });
+    return this.get(id);
+  }
+
+  /** Posted receipts of the order's supplier not attached to any order yet. */
+  async attachable(purchaseOrderId: string): Promise<AttachableReceipt[]> {
+    const order = await this.prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: { supplierId: true, lines: { select: { productId: true } } },
+    });
+    if (!order) throw new NotFoundException('Purchase order not found');
+    const onOrder = new Set(order.lines.map((l) => l.productId));
+    const receipts = await this.prisma.goodsReceipt.findMany({
+      where: { supplierId: order.supplierId, status: 'POSTED', purchaseOrderId: null },
+      orderBy: [{ receivedAt: 'desc' }, { number: 'desc' }],
+      take: 50,
+      include: {
+        lines: {
+          orderBy: { lineNo: 'asc' },
+          include: {
+            product: { select: { id: true, sku: true, name: true } },
+            unit: { select: { id: true, code: true } },
+          },
+        },
+      },
+    });
+    return receipts.map((r) => ({
+      id: r.id,
+      number: r.number,
+      receivedAt: r.receivedAt.toISOString(),
+      supplierRef: r.supplierRef,
+      value: r.lines.reduce((s, l) => s.plus(l.value), D(0)).toFixed(MONEY_DECIMALS),
+      lines: r.lines
+        .filter((l) => l.quantity.gt(0))
+        .map((l) => ({
+          product: l.product,
+          quantity: l.quantity.toFixed(4),
+          unit: l.unit,
+          onOrder: onOrder.has(l.productId),
+        })),
+    }));
+  }
+
+  /**
+   * Attaches a posted receipt to an order of the same supplier: each received product
+   * is matched to the order line of that product (same unit first), the order's
+   * received quantities go up and its status follows. Stock is not touched: the goods
+   * entered it when the receipt was posted.
+   */
+  async attach(id: string, dto: AttachReceiptDto, user: RequestUser): Promise<GoodsReceiptDetail> {
+    await this.prisma.$transaction(async (tx) => {
+      const head = await lockReceipt(tx, id);
+      if (head.status !== 'POSTED') {
+        throw new ConflictException(`${head.number} must be validated before it is attached`);
+      }
+      if (head.purchaseOrderId) {
+        throw new ConflictException(`${head.number} is already attached to an order`);
+      }
+      const order = await lockOrder(tx, dto.purchaseOrderId);
+      if (!canReceive(order.status)) {
+        throw new ConflictException(
+          `${order.number} is ${order.status.toLowerCase().replace('_', ' ')}: no receipt can be attached`,
+        );
+      }
+      const receipt = await tx.goodsReceipt.findUniqueOrThrow({
+        where: { id },
+        include: { lines: { orderBy: { lineNo: 'asc' } } },
+      });
+      if (receipt.supplierId !== order.supplierId) {
+        throw new BadRequestException(`${receipt.number} is from another supplier`);
+      }
+      let matched = 0;
+      for (const l of receipt.lines) {
+        if (l.quantity.lte(0)) continue;
+        const pol =
+          order.lines.find((o) => o.productId === l.productId && o.unitId === l.unitId) ??
+          order.lines.find((o) => o.productId === l.productId);
+        if (!pol) continue;
+        const qty = l.baseQuantity.div(pol.unitFactor).toDecimalPlaces(4);
+        await tx.goodsReceiptLine.update({
+          where: { id: l.id },
+          data: { purchaseOrderLineId: pol.id, matchedQty: qty },
+        });
+        await tx.purchaseOrderLine.update({
+          where: { id: pol.id },
+          data: { receivedQty: { increment: qty } },
+        });
+        matched += 1;
+      }
+      if (!matched) {
+        throw new BadRequestException(
+          `None of the products of ${receipt.number} is on ${order.number}`,
+        );
+      }
+      await tx.goodsReceipt.update({ where: { id }, data: { purchaseOrderId: order.id } });
+      const after = await tx.purchaseOrderLine.findMany({
+        where: { purchaseOrderId: order.id },
+        select: { quantity: true, receivedQty: true },
+      });
+      const status = statusAfterReceipt(after);
+      if (status !== order.status) {
+        await tx.purchaseOrder.update({ where: { id: order.id }, data: { status } });
+      }
       await audit(
         tx,
         user,
-        'receipt-cancelled',
+        'attach',
+        'GoodsReceipt',
+        id,
+        null,
+        toAuditJson({
+          purchaseOrder: order.number,
+          matchedLines: matched,
+        }) as Prisma.InputJsonObject,
+      );
+      await audit(
+        tx,
+        user,
+        'receive',
         'PurchaseOrder',
         order.id,
         { status: order.status },
         toAuditJson({ status, receipt: receipt.number }) as Prisma.InputJsonObject,
       );
+    });
+    return this.get(id);
+  }
+
+  /** Detaches a receipt from its order: the order's received quantities go back down. */
+  async detach(id: string, user: RequestUser): Promise<GoodsReceiptDetail> {
+    await this.prisma.$transaction(async (tx) => {
+      const head = await lockReceipt(tx, id);
+      if (!head.purchaseOrderId) {
+        throw new ConflictException(`${head.number} is not attached to an order`);
+      }
+      await detachFromOrder(tx, id, user);
     });
     return this.get(id);
   }
@@ -580,6 +616,9 @@ export class GoodsReceiptsService {
             ? 'Enter the supplier invoice on the draft, or post the receipt first'
             : `${receipt.number} is cancelled`,
         );
+      }
+      if (!receipt.purchaseOrderId) {
+        throw new ConflictException('Attach the receipt to its order first');
       }
       const order = await lockOrder(tx, receipt.purchaseOrderId);
       if (order.status !== 'RECEIVED') throw new ConflictException(INVOICE_NOT_COMPLETE);
@@ -640,15 +679,15 @@ export function receiptWhere(
     ...(query.status && query.status !== 'all' && { status: query.status }),
     ...((query.from || query.to) && { receivedAt }),
     ...(query.purchaseOrderId && { purchaseOrderId: query.purchaseOrderId }),
-    ...(query.supplierId && { purchaseOrder: { supplierId: query.supplierId } }),
+    ...(query.supplierId && { supplierId: query.supplierId }),
     ...(query.search && {
       OR: [
         { number: contains(query.search) },
         { supplierRef: contains(query.search) },
-        { supplierInvoiceNumber: contains(query.search) },
         { purchaseOrder: { number: contains(query.search) } },
-        { purchaseOrder: { supplier: { name: contains(query.search) } } },
-        { purchaseOrder: { supplier: { code: contains(query.search) } } },
+        { supplier: { name: contains(query.search) } },
+        { supplier: { code: contains(query.search) } },
+        { lines: { some: { lotNumber: contains(query.search) } } },
       ],
     }),
   };
@@ -800,9 +839,10 @@ function toListItem(r: ListRow): GoodsReceiptListItem {
   return {
     id: r.id,
     number: r.number,
+    status: r.status,
     receivedAt: r.receivedAt.toISOString(),
-    purchaseOrder: { id: r.purchaseOrder.id, number: r.purchaseOrder.number },
-    supplier: r.purchaseOrder.supplier,
+    purchaseOrder: r.purchaseOrder,
+    supplier: r.supplier,
     warehouse: r.warehouse,
     supplierRef: r.supplierRef,
     supplierInvoiceNumber: r.supplierInvoiceNumber,
@@ -810,7 +850,6 @@ function toListItem(r: ListRow): GoodsReceiptListItem {
     lineCount: r.lines.length,
     value: r.lines.reduce((s, l) => s.plus(l.value), D(0)).toFixed(MONEY_DECIMALS),
     createdBy: r.createdBy,
-    status: r.status,
     billing: billingState(r.lines),
   };
 }
@@ -824,22 +863,20 @@ export function billingState(
   return received.every((l) => l.billedQty.gte(l.quantity)) ? 'full' : 'partial';
 }
 
-function toDetail(r: DetailRow, invoiceEditable: boolean, tolerance: string): GoodsReceiptDetail {
+function toDetail(r: DetailRow, tolerance: string): GoodsReceiptDetail {
   const bills = new Map<string, { id: string; number: string; status: string }>();
   for (const l of r.lines) for (const il of l.invoiceLines) bills.set(il.invoice.id, il.invoice);
-  const sup = r.purchaseOrder.supplier;
   return {
     ...toListItem({
       ...r,
-      purchaseOrder: {
-        id: r.purchaseOrder.id,
-        number: r.purchaseOrder.number,
-        supplier: { id: sup.id, code: sup.code, name: sup.name },
-      },
+      supplier: { id: r.supplier.id, code: r.supplier.code, name: r.supplier.name },
+      purchaseOrder: r.purchaseOrder
+        ? { id: r.purchaseOrder.id, number: r.purchaseOrder.number }
+        : null,
     }),
-    supplierInfo: sup,
-    purchaseOrderDate: toDateString(r.purchaseOrder.orderDate),
-    invoiceEditable,
+    supplierInfo: r.supplier,
+    purchaseOrderDate: r.purchaseOrder ? toDateString(r.purchaseOrder.orderDate) : null,
+    invoiceEditable: false,
     notes: r.notes,
     postedAt: r.postedAt?.toISOString() ?? null,
     cancelledAt: r.cancelledAt?.toISOString() ?? null,
@@ -847,42 +884,44 @@ function toDetail(r: DetailRow, invoiceEditable: boolean, tolerance: string): Go
     bills: [...bills.values()],
     tolerancePct: tolerance,
     createdAt: r.createdAt.toISOString(),
-    lines: [...r.lines]
-      .sort((a, b) => a.purchaseOrderLine.lineNo - b.purchaseOrderLine.lineNo)
-      .map((l) => ({
-        id: l.id,
-        purchaseOrderLineId: l.purchaseOrderLineId,
-        product: {
-          id: l.product.id,
-          sku: l.product.sku,
-          name: l.product.name,
-          baseUnitCode: l.product.baseUnit.code,
-          barcode: l.product.barcode,
-        },
-        unit: l.purchaseOrderLine.unit,
-        unitFactor: l.purchaseOrderLine.unitFactor.toFixed(4),
-        quantity: l.quantity.toFixed(4),
-        baseQuantity: l.baseQuantity.toFixed(4),
-        unitCost: l.unitCost.toFixed(4),
-        value: l.value.toFixed(MONEY_DECIMALS),
-        rejectedQty: l.rejectedQty.toFixed(4),
-        rejectReason: l.rejectReason,
-        billedQty: l.billedQty.toFixed(4),
-        orderedQty: l.purchaseOrderLine.quantity.toFixed(4),
-        receivedOnOrder: l.purchaseOrderLine.receivedQty.toFixed(4),
-        lotNumber: l.lotNumber,
-        expiryDate: l.expiryDate ? toDateString(l.expiryDate) : null,
-        quality: l.quality,
-      })),
+    lines: r.lines.map((l) => ({
+      id: l.id,
+      purchaseOrderLineId: l.purchaseOrderLineId,
+      matchedQty: l.matchedQty.toFixed(4),
+      product: {
+        id: l.product.id,
+        sku: l.product.sku,
+        name: l.product.name,
+        baseUnitCode: l.product.baseUnit.code,
+        barcode: l.product.barcode,
+      },
+      unit: l.unit,
+      unitFactor: l.unitFactor.toFixed(4),
+      unitPrice: l.unitPrice.toFixed(4),
+      quantity: l.quantity.toFixed(4),
+      baseQuantity: l.baseQuantity.toFixed(4),
+      unitCost: l.unitCost.toFixed(4),
+      value: l.value.toFixed(MONEY_DECIMALS),
+      rejectedQty: l.rejectedQty.toFixed(4),
+      rejectReason: l.rejectReason,
+      billedQty: l.billedQty.toFixed(4),
+      lotNumber: l.lotNumber,
+      expiryDate: l.expiryDate ? toDateString(l.expiryDate) : null,
+      quality: l.quality,
+    })),
   };
 }
 
 // ── create / post helpers ────────────────────────────────────────────────────
 
-type LockedOrder = Awaited<ReturnType<typeof lockOrder>>;
-
 interface CheckedLine {
-  line: LockedOrder['lines'][number];
+  lineNo: number;
+  productId: string;
+  sku: string;
+  unitId: string;
+  unitCode: string;
+  unitFactor: Prisma.Decimal;
+  unitPrice: Prisma.Decimal;
   quantity: Prisma.Decimal;
   rejectedQty: Prisma.Decimal;
   rejectReason: string | null;
@@ -894,134 +933,134 @@ interface CheckedLine {
   value: Prisma.Decimal;
 }
 
-/** Dates and supplier invoice of a receipt body. */
-function checkHeader(dto: CreateGoodsReceiptDto | UpdateGoodsReceiptDto) {
+/** Reception day: not in the future. Today keeps the real time; another day reads midday UTC. */
+function checkDate(receivedDate?: string) {
   const today = toDateString(new Date());
-  const day = dto.receivedDate ?? today;
+  const day = receivedDate ?? today;
   if (day > today) throw new BadRequestException('The reception date cannot be in the future');
-  // Today: the real time. Another day: midday UTC, so the date reads the same everywhere.
-  const receivedAt = day === today ? new Date() : new Date(`${day}T12:00:00.000Z`);
-  const invoiceNumber = dto.supplierInvoiceNumber ?? null;
-  const invoiceDate = dto.supplierInvoiceDate ?? null;
-  if (Boolean(invoiceNumber) !== Boolean(invoiceDate)) {
-    throw new BadRequestException(
-      invoiceNumber
-        ? 'Enter the date of the supplier invoice'
-        : 'Enter the number of the supplier invoice',
-    );
-  }
-  if (invoiceDate && invoiceDate > today) {
-    throw new BadRequestException('The supplier invoice date cannot be in the future');
-  }
-  return { day, receivedAt, invoiceNumber, invoiceDate };
+  return { day, receivedAt: day === today ? new Date() : new Date(`${day}T12:00:00.000Z`) };
 }
 
-function assertReceivable(order: LockedOrder) {
-  if (!canReceive(order.status)) {
-    throw new ConflictException(
-      order.status === 'RECEIVED'
-        ? `${order.number} is already fully received`
-        : `${order.number} is ${order.status.toLowerCase().replace('_', ' ')}: goods cannot be received`,
-    );
-  }
-}
-
-async function tolerancePct(tx: Tx): Promise<Prisma.Decimal> {
-  const settings = await tx.companySettings.findUnique({
-    where: { id: 1 },
-    select: { receiptTolerancePct: true },
+async function activeSupplier(tx: Tx, id: string) {
+  const supplier = await tx.supplier.findUnique({
+    where: { id },
+    select: { id: true, name: true, isActive: true },
   });
-  return settings?.receiptTolerancePct ?? D(0);
+  if (!supplier) throw new BadRequestException('Supplier not found');
+  if (!supplier.isActive) throw new BadRequestException(`${supplier.name} is inactive`);
+  return supplier;
+}
+
+/** The given warehouse (must be active), or the first active one. */
+async function pickWarehouse(tx: Tx, id?: string): Promise<string> {
+  const warehouse = id
+    ? await tx.warehouse.findUnique({
+        where: { id },
+        select: { id: true, code: true, isActive: true },
+      })
+    : await tx.warehouse.findFirst({
+        where: { isActive: true },
+        orderBy: { code: 'asc' },
+        select: { id: true, code: true, isActive: true },
+      });
+  if (!warehouse) throw new BadRequestException('Warehouse not found');
+  if (!warehouse.isActive) throw new BadRequestException(`Warehouse ${warehouse.code} is inactive`);
+  return warehouse.id;
 }
 
 /**
- * Checks every line against what can still be received (what is left plus the
- * tolerance) and values it at the order price. Lines with nothing accepted and
- * nothing rejected are dropped.
+ * Checks the received lines: active product, a unit of that product (its base unit or
+ * one of its pack sizes), quantities, and the observation required when goods are
+ * refused or non-conform. Values each line at its own price. The same product can
+ * appear on several lines (e.g. two lots).
  */
-function checkLines(
-  order: LockedOrder,
+async function checkLines(
+  tx: Tx,
   input: {
-    purchaseOrderLineId: string;
+    productId: string;
+    unitId: string;
     quantity: string;
+    unitPrice: string;
     rejectedQty?: string;
     rejectReason?: string | null;
     lotNumber?: string | null;
     expiryDate?: string | null;
     quality?: 'CONFORM' | 'NON_CONFORM';
   }[],
-  tolerance: Prisma.Decimal,
-): CheckedLine[] {
-  const byId = new Map(order.lines.map((l) => [l.id, l]));
-  const seen = new Set<string>();
-  const errors: string[] = [];
-  const wanted = input.filter((l) => {
-    if (seen.has(l.purchaseOrderLineId)) {
-      errors.push('Each order line can appear only once');
-      return false;
-    }
-    seen.add(l.purchaseOrderLineId);
-    return D(l.quantity).gt(0) || D(l.rejectedQty ?? 0).gt(0);
-  });
-  for (const l of wanted) {
-    const line = byId.get(l.purchaseOrderLineId);
-    if (!line) {
-      errors.push('A line does not belong to this order');
-      continue;
-    }
-    const limit = receivableLimit(line.quantity, line.receivedQty, tolerance);
-    if (D(l.quantity).gt(limit)) {
-      const remaining = line.quantity.minus(line.receivedQty);
-      errors.push(
-        tolerance.gt(0)
-          ? `Line ${line.lineNo} (${line.product.sku}): ${trim(l.quantity)} ${line.unit.code} is more than the ${trim(limit)} ${line.unit.code} allowed (${trim(remaining.isNegative() ? D(0) : remaining)} left + ${trim(tolerance)} % tolerance)`
-          : `Line ${line.lineNo} (${line.product.sku}): ${trim(l.quantity)} ${line.unit.code} is more than the ${trim(remaining)} ${line.unit.code} still to receive`,
-      );
-    }
-    if (D(l.rejectedQty ?? 0).gt(0) && !l.rejectReason) {
-      errors.push(`Line ${line.lineNo} (${line.product.sku}): enter why goods were refused`);
-    }
-    if (l.quality === 'NON_CONFORM' && !l.rejectReason) {
-      errors.push(
-        `Line ${line.lineNo} (${line.product.sku}): enter an observation for a non-conform line`,
-      );
-    }
-  }
-  if (errors.length) throw new BadRequestException([...new Set(errors)]);
-  if (!wanted.length) throw new BadRequestException('Enter a quantity on at least one line');
-
-  return (
-    wanted
-      .map((l) => {
-        const line = byId.get(l.purchaseOrderLineId)!;
-        const rejected = D(l.rejectedQty ?? 0);
-        return {
-          line,
-          quantity: D(l.quantity),
-          rejectedQty: rejected,
-          rejectReason:
-            rejected.gt(0) || l.quality === 'NON_CONFORM' ? (l.rejectReason ?? null) : null,
-          lotNumber: l.lotNumber ?? null,
-          expiryDate: l.expiryDate ? new Date(`${l.expiryDate}T00:00:00.000Z`) : null,
-          quality: l.quality ?? 'CONFORM',
-          ...receiptLineAmounts(l.quantity, line.unitPrice, line.discountPct, line.unitFactor),
-        };
+): Promise<CheckedLine[]> {
+  if (!input.length) throw new BadRequestException('Add at least one product');
+  const products = new Map(
+    (
+      await tx.product.findMany({
+        where: { id: { in: [...new Set(input.map((l) => l.productId))] } },
+        select: {
+          id: true,
+          sku: true,
+          isActive: true,
+          baseUnitId: true,
+          baseUnit: { select: { id: true, code: true } },
+          units: { select: { unitId: true, factor: true, unit: { select: { code: true } } } },
+        },
       })
-      // Stable lock order (product, then line) so concurrent documents cannot deadlock.
-      .sort((a, b) =>
-        a.line.productId === b.line.productId
-          ? a.line.lineNo - b.line.lineNo
-          : a.line.productId < b.line.productId
-            ? -1
-            : 1,
-      )
+    ).map((p) => [p.id, p]),
   );
+  const errors: string[] = [];
+  const out: CheckedLine[] = [];
+  input.forEach((l, i) => {
+    const n = i + 1;
+    const p = products.get(l.productId);
+    if (!p) return errors.push(`Line ${n}: product not found`);
+    if (!p.isActive) errors.push(`Line ${n} (${p.sku}): the product is inactive`);
+    let factor = D(1);
+    let unitCode = p.baseUnit.code;
+    if (l.unitId !== p.baseUnitId) {
+      const pack = p.units.find((u) => u.unitId === l.unitId);
+      if (!pack)
+        return errors.push(`Line ${n} (${p.sku}): this unit is not one of the product's units`);
+      factor = pack.factor;
+      unitCode = pack.unit.code;
+    }
+    const qty = D(l.quantity);
+    const rejected = D(l.rejectedQty ?? 0);
+    if (qty.lte(0) && rejected.lte(0)) {
+      errors.push(`Line ${n} (${p.sku}): enter the quantity received`);
+    }
+    const nonConform = l.quality === 'NON_CONFORM';
+    if (rejected.gt(0) && !l.rejectReason) {
+      errors.push(`Line ${n} (${p.sku}): enter why goods were refused`);
+    }
+    if (nonConform && !l.rejectReason) {
+      errors.push(`Line ${n} (${p.sku}): enter an observation for a non-conform line`);
+    }
+    const price = D(l.unitPrice);
+    out.push({
+      lineNo: n,
+      productId: p.id,
+      sku: p.sku,
+      unitId: l.unitId,
+      unitCode,
+      unitFactor: factor,
+      unitPrice: price,
+      quantity: qty,
+      rejectedQty: rejected,
+      rejectReason: rejected.gt(0) || nonConform ? (l.rejectReason ?? null) : null,
+      lotNumber: l.lotNumber ?? null,
+      expiryDate: l.expiryDate ? new Date(`${l.expiryDate}T00:00:00.000Z`) : null,
+      quality: l.quality ?? 'CONFORM',
+      ...receiptLineAmounts(qty, price, 0, factor),
+    });
+  });
+  if (errors.length) throw new BadRequestException([...new Set(errors)]);
+  return out;
 }
 
 function toLineData(l: CheckedLine) {
   return {
-    purchaseOrderLineId: l.line.id,
-    productId: l.line.productId,
+    lineNo: l.lineNo,
+    productId: l.productId,
+    unitId: l.unitId,
+    unitFactor: l.unitFactor,
+    unitPrice: l.unitPrice,
     quantity: l.quantity,
     baseQuantity: l.baseQuantity,
     unitCost: l.unitCost,
@@ -1036,12 +1075,13 @@ function toLineData(l: CheckedLine) {
 
 function auditLines(lines: CheckedLine[]) {
   return lines.map((l) => ({
-    sku: l.line.product.sku,
+    sku: l.sku,
     quantity: l.quantity.toString(),
+    unit: l.unitCode,
+    unitPrice: l.unitPrice.toString(),
     rejectedQty: l.rejectedQty.toString(),
-    unit: l.line.unit.code,
-    baseQuantity: l.baseQuantity.toString(),
-    unitCost: l.unitCost.toString(),
+    lot: l.lotNumber,
+    quality: l.quality,
   }));
 }
 
@@ -1061,52 +1101,54 @@ async function lockReceipt(tx: Tx, id: string) {
   });
 }
 
+/** The average cost is per product (all warehouses): lock the products while it changes. */
+async function lockProducts(tx: Tx, productIds: string[]) {
+  if (!productIds.length) return;
+  await tx.$queryRaw`
+    SELECT id FROM products WHERE id IN (${Prisma.join(productIds.map((p) => Prisma.sql`${p}::uuid`))})
+    ORDER BY id FOR UPDATE`;
+}
+
 /**
  * Posts a draft receipt, in the caller's transaction: number, stock moves (IN),
- * warehouse balances, weighted average cost, last purchase cost, received quantities
- * and status of the order. The quantities are checked again: another receipt may
- * have been posted on the same order since the draft was saved.
+ * warehouse balances, weighted average cost and last purchase cost.
  */
 async function postReceipt(tx: Tx, id: string, user: RequestUser): Promise<void> {
   const head = await lockReceipt(tx, id);
   if (head.status !== 'DRAFT') {
     throw new ConflictException(`${head.number} is already ${head.status.toLowerCase()}`);
   }
-  const order = await lockOrder(tx, head.purchaseOrderId);
-  assertReceivable(order);
   const draft = await tx.goodsReceipt.findUniqueOrThrow({
     where: { id },
-    include: { lines: true },
+    include: { lines: { orderBy: { lineNo: 'asc' } }, supplier: { select: { name: true } } },
   });
-  const warehouse = await tx.warehouse.findUniqueOrThrow({
-    where: { id: draft.warehouseId },
-    select: { code: true, isActive: true },
-  });
-  if (!warehouse.isActive) {
-    throw new BadRequestException(`Warehouse ${warehouse.code} is inactive`);
-  }
-  const lines = checkLines(
-    order,
+  await activeSupplier(tx, draft.supplierId);
+  await pickWarehouse(tx, draft.warehouseId);
+  const lines = await checkLines(
+    tx,
     draft.lines.map((l) => ({
-      purchaseOrderLineId: l.purchaseOrderLineId,
+      productId: l.productId,
+      unitId: l.unitId,
       quantity: l.quantity.toString(),
+      unitPrice: l.unitPrice.toString(),
       rejectedQty: l.rejectedQty.toString(),
       rejectReason: l.rejectReason,
       lotNumber: l.lotNumber,
       expiryDate: l.expiryDate ? toDateString(l.expiryDate) : null,
       quality: l.quality,
     })),
-    await tolerancePct(tx),
   );
-
-  const moving = lines.filter((l) => l.quantity.gt(0));
-  const productIds = [...new Set(moving.map((l) => l.line.productId))];
-  if (productIds.length) {
-    // The average cost is per product (all warehouses): lock the products while it changes.
-    await tx.$queryRaw`
-      SELECT id FROM products WHERE id IN (${Prisma.join(productIds.map((p) => Prisma.sql`${p}::uuid`))})
-      ORDER BY id FOR UPDATE`;
+  const moving = lines
+    .filter((l) => l.quantity.gt(0))
+    // Stable lock order so concurrent documents cannot deadlock.
+    .sort((a, b) =>
+      a.productId === b.productId ? a.lineNo - b.lineNo : a.productId < b.productId ? -1 : 1,
+    );
+  if (!moving.length) {
+    throw new BadRequestException('Nothing was accepted: enter a received quantity on a line');
   }
+  const productIds = [...new Set(moving.map((l) => l.productId))];
+  await lockProducts(tx, productIds);
 
   const number = await nextDocumentNumber(tx, 'GOODS_RECEIPT', draft.receivedAt);
   await tx.goodsReceipt.update({
@@ -1116,13 +1158,12 @@ async function postReceipt(tx: Tx, id: string, user: RequestUser): Promise<void>
 
   const costChanges: Record<string, { before: string; after: string }> = {};
   for (const l of moving) {
-    const productId = l.line.productId;
     const product = await tx.product.findUniqueOrThrow({
-      where: { id: productId },
+      where: { id: l.productId },
       select: { averageCost: true },
     });
     const stock = await tx.stockBalance.aggregate({
-      where: { productId },
+      where: { productId: l.productId },
       _sum: { quantity: true },
     });
     const average = weightedAverageCost(
@@ -1132,18 +1173,17 @@ async function postReceipt(tx: Tx, id: string, user: RequestUser): Promise<void>
       l.unitCost,
     );
     if (!average.eq(product.averageCost)) {
-      await tx.product.update({ where: { id: productId }, data: { averageCost: average } });
+      await tx.product.update({ where: { id: l.productId }, data: { averageCost: average } });
     }
-    costChanges[l.line.product.sku] = {
-      before: costChanges[l.line.product.sku]?.before ?? product.averageCost.toFixed(4),
+    costChanges[l.sku] = {
+      before: costChanges[l.sku]?.before ?? product.averageCost.toFixed(4),
       after: average.toFixed(4),
     };
-
-    const balance = await lockBalance(tx, productId, draft.warehouseId);
+    const balance = await lockBalance(tx, l.productId, draft.warehouseId);
     await postMove(
       tx,
       {
-        productId,
+        productId: l.productId,
         warehouseId: draft.warehouseId,
         type: 'RECEIPT',
         quantity: l.baseQuantity,
@@ -1155,27 +1195,8 @@ async function postReceipt(tx: Tx, id: string, user: RequestUser): Promise<void>
       },
       balance.plus(l.baseQuantity),
     );
-
-    await tx.purchaseOrderLine.update({
-      where: { id: l.line.id },
-      data: { receivedQty: { increment: l.quantity } },
-    });
-  }
-
-  const after = await tx.purchaseOrderLine.findMany({
-    where: { purchaseOrderId: order.id },
-    select: { quantity: true, receivedQty: true },
-  });
-  const status = moving.length ? statusAfterReceipt(after) : order.status;
-  // The supplier invoice comes with the delivery that completes the order.
-  if (draft.supplierInvoiceNumber && status !== 'RECEIVED') {
-    throw new BadRequestException(INVOICE_NOT_COMPLETE);
-  }
-  if (status !== order.status) {
-    await tx.purchaseOrder.update({ where: { id: order.id }, data: { status } });
   }
   const lastCost = await refreshLastPurchaseCost(tx, productIds);
-
   await audit(
     tx,
     user,
@@ -1186,25 +1207,58 @@ async function postReceipt(tx: Tx, id: string, user: RequestUser): Promise<void>
     toAuditJson({
       status: 'POSTED',
       number,
-      purchaseOrder: order.number,
-      supplierInvoice: draft.supplierInvoiceNumber
-        ? {
-            number: draft.supplierInvoiceNumber,
-            date: draft.supplierInvoiceDate ? toDateString(draft.supplierInvoiceDate) : null,
-          }
-        : null,
+      supplier: draft.supplier.name,
       lines: auditLines(lines),
       averageCost: costChanges,
       lastPurchaseCost: lastCost,
     }) as Prisma.InputJsonObject,
   );
+}
+
+/** Undoes what attaching did on the order (in the caller's transaction). */
+async function detachFromOrder(tx: Tx, receiptId: string, user: RequestUser): Promise<void> {
+  const receipt = await tx.goodsReceipt.findUniqueOrThrow({
+    where: { id: receiptId },
+    include: { lines: true },
+  });
+  if (!receipt.purchaseOrderId) return;
+  const order = await lockOrder(tx, receipt.purchaseOrderId);
+  for (const l of receipt.lines) {
+    if (!l.purchaseOrderLineId) continue;
+    await tx.purchaseOrderLine.update({
+      where: { id: l.purchaseOrderLineId },
+      data: { receivedQty: { decrement: l.matchedQty } },
+    });
+  }
+  await tx.goodsReceiptLine.updateMany({
+    where: { goodsReceiptId: receiptId },
+    data: { purchaseOrderLineId: null, matchedQty: 0 },
+  });
+  await tx.goodsReceipt.update({ where: { id: receiptId }, data: { purchaseOrderId: null } });
+  const after = await tx.purchaseOrderLine.findMany({
+    where: { purchaseOrderId: order.id },
+    select: { quantity: true, receivedQty: true },
+  });
+  const status = statusAfterCancelledReceipt(after);
+  if (status !== order.status) {
+    await tx.purchaseOrder.update({ where: { id: order.id }, data: { status } });
+  }
   await audit(
     tx,
     user,
-    'receive',
+    'detach',
+    'GoodsReceipt',
+    receiptId,
+    toAuditJson({ purchaseOrder: order.number }) as Prisma.InputJsonObject,
+    null,
+  );
+  await audit(
+    tx,
+    user,
+    'receipt-detached',
     'PurchaseOrder',
     order.id,
     { status: order.status },
-    toAuditJson({ status, receipt: number }) as Prisma.InputJsonObject,
+    toAuditJson({ status, receipt: receipt.number }) as Prisma.InputJsonObject,
   );
 }

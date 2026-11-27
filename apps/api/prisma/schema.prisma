@@ -224,6 +224,7 @@ model Unit {
   productUnits       ProductUnit[]
   priceListItems     PriceListItem[]
   purchaseOrderLines PurchaseOrderLine[]
+  goodsReceiptLines  GoodsReceiptLine[]
   salesOrderLines    SalesOrderLine[]
 
   @@map("units")
@@ -441,6 +442,7 @@ model Supplier {
 
   taxRate        TaxRate?        @relation(fields: [taxRateId], references: [id])
   purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
   invoices       Invoice[]
   payments       Payment[]
 
@@ -568,7 +570,10 @@ model GoodsReceipt {
   /// Assigned when posted; drafts use a temporary "DRAFT-…" number
   number                String             @unique
   status                GoodsReceiptStatus @default(DRAFT)
-  purchaseOrderId       String             @map("purchase_order_id") @db.Uuid
+  /// Who delivered the goods: a receipt stands on its own, without an order
+  supplierId            String             @map("supplier_id") @db.Uuid
+  /// Set when the receipt is attached to a purchase order (from the order page)
+  purchaseOrderId       String?            @map("purchase_order_id") @db.Uuid
   warehouseId           String             @map("warehouse_id") @db.Uuid
   receivedAt            DateTime           @default(now()) @map("received_at")
   /// The supplier's delivery note number (bon de livraison), as printed on their document
@@ -584,12 +589,14 @@ model GoodsReceipt {
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at")
 
-  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id])
+  supplier      Supplier           @relation(fields: [supplierId], references: [id])
+  purchaseOrder PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
   warehouse     Warehouse          @relation(fields: [warehouseId], references: [id])
   createdBy     User               @relation(fields: [createdById], references: [id])
   lines         GoodsReceiptLine[]
 
   @@index([purchaseOrderId])
+  @@index([supplierId])
   @@index([receivedAt])
   @@index([status])
   @@map("goods_receipts")
@@ -598,13 +605,24 @@ model GoodsReceipt {
 model GoodsReceiptLine {
   id                  String         @id @default(uuid()) @db.Uuid
   goodsReceiptId      String         @map("goods_receipt_id") @db.Uuid
-  purchaseOrderLineId String         @map("purchase_order_line_id") @db.Uuid
+  /// Position on the receipt (entry order)
+  lineNo              Int            @default(0) @map("line_no")
+  /// Order line it was matched to when the receipt was attached to an order
+  purchaseOrderLineId String?        @map("purchase_order_line_id") @db.Uuid
   productId           String         @map("product_id") @db.Uuid
-  /// In the PO line's unit
+  /// The product's base unit or one of its pack sizes
+  unitId              String         @map("unit_id") @db.Uuid
+  /// Base units per line unit, copied at entry
+  unitFactor          Decimal        @default(1) @map("unit_factor") @db.Decimal(18, 4)
+  /// Purchase price per line unit, before VAT
+  unitPrice           Decimal        @default(0) @map("unit_price") @db.Decimal(18, 4)
+  /// In the line unit
   quantity            Decimal        @db.Decimal(18, 4)
-  /// quantity × PO unit factor: what entered the stock
+  /// Quantity matched on the order line (in the order line's unit) when attached
+  matchedQty          Decimal        @default(0) @map("matched_qty") @db.Decimal(18, 4)
+  /// quantity × unit factor: what entered the stock
   baseQuantity        Decimal        @default(0) @map("base_quantity") @db.Decimal(18, 4)
-  /// Cost per base unit: PO price after discount, before VAT (used for the average cost)
+  /// Cost per base unit: price before VAT / unit factor (used for the average cost)
   unitCost            Decimal        @default(0) @map("unit_cost") @db.Decimal(18, 4)
   /// quantity × PO price after discount, before VAT, to the millime
   value               Decimal        @default(0) @db.Decimal(18, 3)
@@ -620,9 +638,10 @@ model GoodsReceiptLine {
   /// Quality check at reception; NON_CONFORM needs an observation (reject_reason)
   quality             ReceiptQuality @default(CONFORM)
 
-  goodsReceipt      GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
-  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id])
-  product           Product           @relation(fields: [productId], references: [id])
+  goodsReceipt      GoodsReceipt       @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
+  product           Product            @relation(fields: [productId], references: [id])
+  unit              Unit               @relation(fields: [unitId], references: [id])
   invoiceLines      InvoiceLine[]
 
   @@map("goods_receipt_lines")

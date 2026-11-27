@@ -176,7 +176,8 @@ export interface GoodsReceiptListItem {
   status: GoodsReceiptStatus;
   /** ISO date-time the goods arrived */
   receivedAt: string;
-  purchaseOrder: { id: string; number: string };
+  /** The order this receipt is attached to (from the order page), if any */
+  purchaseOrder: { id: string; number: string } | null;
   supplier: { id: string; code: string; name: string };
   warehouse: { id: string; code: string; name: string };
   /** The supplier's delivery note number (bon de livraison) */
@@ -198,7 +199,10 @@ export type ReceiptQuality = (typeof RECEIPT_QUALITIES)[number];
 
 export interface GoodsReceiptLineDto {
   id: string;
-  purchaseOrderLineId: string;
+  /** Order line it was matched to when the receipt was attached to an order */
+  purchaseOrderLineId: string | null;
+  /** Quantity counted on that order line (in the order line's unit) */
+  matchedQty: string;
   product: {
     id: string;
     sku: string;
@@ -208,7 +212,9 @@ export interface GoodsReceiptLineDto {
   };
   unit: { id: string; code: string };
   unitFactor: string;
-  /** In the order line's unit */
+  /** Purchase price per line unit, before VAT */
+  unitPrice: string;
+  /** In the line unit */
   quantity: string;
   /** What entered the stock, in the product's base unit */
   baseQuantity: string;
@@ -220,9 +226,6 @@ export interface GoodsReceiptLineDto {
   rejectReason: string | null;
   /** Already on posted supplier bills, in the order line's unit */
   billedQty: string;
-  /** Ordered and already received (posted) on the order line, for drafts */
-  orderedQty: string;
-  receivedOnOrder: string;
   lotNumber: string | null;
   /** YYYY-MM-DD */
   expiryDate: string | null;
@@ -244,7 +247,7 @@ export interface ReceiptSupplierInfo {
 
 export interface GoodsReceiptDetail extends GoodsReceiptListItem {
   supplierInfo: ReceiptSupplierInfo;
-  purchaseOrderDate: string;
+  purchaseOrderDate: string | null;
   notes: string | null;
   postedAt: string | null;
   cancelledAt: string | null;
@@ -266,26 +269,31 @@ export interface SupplierInvoiceInput {
   supplierInvoiceDate: string;
 }
 
+/**
+ * Body of POST /purchasing/receipts: a receipt stands on its own (supplier + the
+ * products received). It is attached to an order later, from the order page.
+ */
 export interface GoodsReceiptInput {
-  purchaseOrderId: string;
+  supplierId: string;
+  /** Default: the first active warehouse */
+  warehouseId?: string;
   /** YYYY-MM-DD; today when omitted */
   receivedDate?: string;
   supplierRef?: string | null;
-  /** Both or neither; only when this receipt completes the order (100 % received) */
-  supplierInvoiceNumber?: string | null;
-  /** YYYY-MM-DD */
-  supplierInvoiceDate?: string | null;
   notes?: string | null;
-  /** Lines with a quantity of 0 (and nothing rejected) are ignored */
   lines: GoodsReceiptLineInput[];
   /** true = save as a draft (no stock movement); default false = receive and post at once */
   asDraft?: boolean;
 }
 
 export interface GoodsReceiptLineInput {
-  purchaseOrderLineId: string;
-  /** Accepted quantity, in the order line's unit */
+  productId: string;
+  /** The product's base unit or one of its pack sizes */
+  unitId: string;
+  /** Accepted quantity, in that unit */
   quantity: string;
+  /** Purchase price per unit, before VAT */
+  unitPrice: string;
   /** Refused at the door; does not enter the stock */
   rejectedQty?: string;
   /** Why goods were refused, or the observation of a non-conform line */
@@ -295,6 +303,22 @@ export interface GoodsReceiptLineInput {
   expiryDate?: string | null;
   /** Default CONFORM; NON_CONFORM needs an observation */
   quality?: ReceiptQuality;
+}
+
+/** A posted receipt that can be attached to an order (same supplier, not attached yet). */
+export interface AttachableReceipt {
+  id: string;
+  number: string;
+  receivedAt: string;
+  supplierRef: string | null;
+  value: string;
+  lines: {
+    product: { id: string; sku: string; name: string };
+    quantity: string;
+    unit: { id: string; code: string };
+    /** The product is on the order */
+    onOrder: boolean;
+  }[];
 }
 
 /** GET / PATCH /purchasing/receipts/settings */

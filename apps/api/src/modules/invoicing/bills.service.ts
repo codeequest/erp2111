@@ -66,12 +66,13 @@ const DETAIL_INCLUDE = {
           id: true,
           quantity: true,
           billedQty: true,
-          goodsReceipt: { select: { id: true, number: true, receivedAt: true } },
-          purchaseOrderLine: {
+          unitPrice: true,
+          unit: { select: { id: true, code: true } },
+          goodsReceipt: {
             select: {
-              unitPrice: true,
-              discountPct: true,
-              unit: { select: { id: true, code: true } },
+              id: true,
+              number: true,
+              receivedAt: true,
               purchaseOrder: { select: { id: true, number: true } },
             },
           },
@@ -212,26 +213,19 @@ export class BillsService {
     const receipts = await this.prisma.goodsReceipt.findMany({
       where: {
         status: 'POSTED',
-        purchaseOrder: {
-          supplierId: query.supplierId,
-          ...(query.purchaseOrderId && { id: query.purchaseOrderId }),
-        },
+        supplierId: query.supplierId,
+        ...(query.purchaseOrderId && { purchaseOrderId: query.purchaseOrderId }),
       },
       orderBy: [{ receivedAt: 'asc' }, { number: 'asc' }],
       include: {
         purchaseOrder: { select: { id: true, number: true } },
         lines: {
+          orderBy: { lineNo: 'asc' },
           include: {
-            product: { select: { id: true, sku: true, name: true } },
-            purchaseOrderLine: {
-              select: {
-                lineNo: true,
-                unitPrice: true,
-                discountPct: true,
-                taxRate: true,
-                unit: { select: { id: true, code: true } },
-              },
+            product: {
+              select: { id: true, sku: true, name: true, taxRate: { select: { rate: true } } },
             },
+            unit: { select: { id: true, code: true } },
           },
         },
       },
@@ -246,19 +240,17 @@ export class BillsService {
         supplierInvoiceDate: r.supplierInvoiceDate ? toDay(r.supplierInvoiceDate) : null,
         lines: r.lines
           .filter((l) => l.quantity.gt(l.billedQty))
-          .sort((a, b) => a.purchaseOrderLine.lineNo - b.purchaseOrderLine.lineNo)
           .map((l) => ({
             goodsReceiptLineId: l.id,
             receipt: { id: r.id, number: r.number, receivedAt: r.receivedAt.toISOString() },
             purchaseOrder: r.purchaseOrder,
-            product: l.product,
-            unit: l.purchaseOrderLine.unit,
+            product: { id: l.product.id, sku: l.product.sku, name: l.product.name },
+            unit: l.unit,
             receivedQty: l.quantity.toFixed(4),
             billedQty: l.billedQty.toFixed(4),
             toBill: l.quantity.minus(l.billedQty).toFixed(4),
-            unitPrice: l.purchaseOrderLine.unitPrice.toFixed(4),
-            discountPct: l.purchaseOrderLine.discountPct.toFixed(2),
-            taxRate: l.purchaseOrderLine.taxRate.toFixed(2),
+            unitPrice: l.unitPrice.toFixed(4),
+            taxRate: (l.product.taxRate?.rate ?? D(0)).toFixed(2),
           })),
       }))
       .filter((r) => r.lines.length > 0);
@@ -612,7 +604,8 @@ async function prepareBill(tx: Tx, dto: CreateBillDto) {
             select: {
               number: true,
               status: true,
-              purchaseOrder: { select: { id: true, supplierId: true } },
+              supplierId: true,
+              purchaseOrderId: true,
             },
           },
           product: { select: { name: true } },
@@ -653,10 +646,10 @@ async function prepareBill(tx: Tx, dto: CreateBillDto) {
         if (r.goodsReceipt.status !== 'POSTED') {
           errors.push(`Line ${n}: ${r.goodsReceipt.number} is not posted`);
         }
-        if (r.goodsReceipt.purchaseOrder.supplierId !== dto.supplierId) {
+        if (r.goodsReceipt.supplierId !== dto.supplierId) {
           errors.push(`Line ${n}: ${r.goodsReceipt.number} is from another supplier`);
         }
-        orders.add(r.goodsReceipt.purchaseOrder.id);
+        if (r.goodsReceipt.purchaseOrderId) orders.add(r.goodsReceipt.purchaseOrderId);
         const left = r.quantity.minus(r.billedQty);
         if (qty.gt(left)) {
           errors.push(
@@ -762,7 +755,6 @@ function toListItem(r: ListRow, day: string): BillListItem {
   };
 }
 
-/** Order prices are in the company currency: they are compared only with bills in it. */
 function toDetail(r: DetailRow, day: string, companyCurrency: string): BillDetail {
   const base = toListItem(r, day);
   const c = base.currency;
@@ -773,42 +765,32 @@ function toDetail(r: DetailRow, day: string, companyCurrency: string): BillDetai
     const rl = l.goodsReceiptLine;
     let receiptLine: BillDetail['lines'][number]['receiptLine'] = null;
     if (rl) {
-      const pol = rl.purchaseOrderLine;
       const billedElsewhere = posted ? rl.billedQty.minus(l.quantity) : rl.billedQty;
-      receipts.set(rl.goodsReceipt.id, {
-        id: rl.goodsReceipt.id,
-        number: rl.goodsReceipt.number,
-        receivedAt: rl.goodsReceipt.receivedAt.toISOString(),
+      const gr = rl.goodsReceipt;
+      receipts.set(gr.id, {
+        id: gr.id,
+        number: gr.number,
+        receivedAt: gr.receivedAt.toISOString(),
       });
       receiptLine = {
         id: rl.id,
-        receipt: { id: rl.goodsReceipt.id, number: rl.goodsReceipt.number },
-        purchaseOrder: pol.purchaseOrder,
-        unit: pol.unit,
+        receipt: { id: gr.id, number: gr.number },
+        purchaseOrder: gr.purchaseOrder,
+        unit: rl.unit,
         receivedQty: rl.quantity.toFixed(4),
         billedElsewhere: billedElsewhere.toFixed(4),
-        orderPrice: pol.unitPrice.toFixed(4),
-        orderDiscountPct: pol.discountPct.toFixed(2),
+        receiptPrice: rl.unitPrice.toFixed(4),
       };
-      const sameCurrency = r.currency === companyCurrency;
-      if (sameCurrency && !l.unitPrice.eq(pol.unitPrice)) {
+      // Receipt prices are in the company currency: compare only bills in it.
+      const net = l.unitPrice.mul(D(100).minus(l.discountPct)).div(100).toDecimalPlaces(4);
+      if (r.currency === companyCurrency && !net.eq(rl.unitPrice)) {
         warnings.push({
           lineNo: l.lineNo,
           kind: 'price',
-          billed: trim(l.unitPrice),
-          expected: trim(pol.unitPrice),
-          purchaseOrderNumber: pol.purchaseOrder.number,
-          message: `Line ${l.lineNo}: price ${trim(l.unitPrice)} differs from the order price ${trim(pol.unitPrice)} (${pol.purchaseOrder.number})`,
-        });
-      }
-      if (sameCurrency && !l.discountPct.eq(pol.discountPct)) {
-        warnings.push({
-          lineNo: l.lineNo,
-          kind: 'discount',
-          billed: trim(l.discountPct),
-          expected: trim(pol.discountPct),
-          purchaseOrderNumber: pol.purchaseOrder.number,
-          message: `Line ${l.lineNo}: discount ${trim(l.discountPct)} % differs from the order discount ${trim(pol.discountPct)} %`,
+          billed: trim(net),
+          expected: trim(rl.unitPrice),
+          receiptNumber: gr.number,
+          message: `Line ${l.lineNo}: net price ${trim(net)} differs from the price ${trim(rl.unitPrice)} on ${gr.number}`,
         });
       }
       if (l.quantity.gt(rl.quantity.minus(billedElsewhere))) {
@@ -817,7 +799,7 @@ function toDetail(r: DetailRow, day: string, companyCurrency: string): BillDetai
           kind: 'quantity',
           billed: trim(l.quantity),
           expected: trim(rl.quantity.minus(billedElsewhere)),
-          purchaseOrderNumber: pol.purchaseOrder.number,
+          receiptNumber: gr.number,
           message: `Line ${l.lineNo}: ${trim(l.quantity)} billed but only ${trim(rl.quantity.minus(billedElsewhere))} received and not billed elsewhere`,
         });
       }

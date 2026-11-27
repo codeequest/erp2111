@@ -40,14 +40,25 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 export class GoodsReceiptLineDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
-  purchaseOrderLineId: string;
+  productId: string;
 
-  @ApiProperty({ example: '12', description: "In the order line's unit; 0 = not received now" })
+  @ApiProperty({ format: 'uuid', description: "The product's base unit or one of its pack sizes" })
+  @IsUUID()
+  unitId: string;
+
+  @ApiProperty({ example: '12', description: 'Accepted quantity, in that unit' })
   @Transform(trim)
   @Matches(DECIMAL, {
     message: 'quantity must be a non-negative number with at most 4 decimals',
   })
   quantity: string;
+
+  @ApiProperty({ example: '17.500', description: 'Purchase price per unit, before VAT' })
+  @Transform(trim)
+  @Matches(DECIMAL, {
+    message: 'unit price must be a non-negative number with at most 4 decimals',
+  })
+  unitPrice: string;
 
   @ApiPropertyOptional({
     example: '2',
@@ -87,9 +98,14 @@ export class GoodsReceiptLineDto {
 }
 
 export class CreateGoodsReceiptDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiProperty({ format: 'uuid', description: 'Who delivered the goods' })
   @IsUUID()
-  purchaseOrderId: string;
+  supplierId: string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Default: the first active warehouse' })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
 
   @ApiPropertyOptional({
     example: '2026-11-26',
@@ -105,25 +121,6 @@ export class CreateGoodsReceiptDto {
   @IsString()
   @MaxLength(60)
   supplierRef?: string | null;
-
-  @ApiPropertyOptional({
-    example: 'FA-2026-0917',
-    description: "Supplier's invoice number, when it came with the goods (with its date)",
-  })
-  @Transform(trimToNull)
-  @IsOptional()
-  @IsString()
-  @MaxLength(60)
-  supplierInvoiceNumber?: string | null;
-
-  @ApiPropertyOptional({
-    example: '2026-11-25',
-    description: "Date printed on the supplier's invoice",
-  })
-  @Transform(trimToNull)
-  @IsOptional()
-  @IsDateString({ strict: true })
-  supplierInvoiceDate?: string | null;
 
   @ApiPropertyOptional()
   @Transform(trimToNull)
@@ -149,7 +146,14 @@ export class CreateGoodsReceiptDto {
   asDraft?: boolean;
 }
 
-/** PATCH /purchasing/receipts/:id — drafts only, same order. */
+/** POST /purchasing/receipts/:id/attach — attach a posted receipt to an order. */
+export class AttachReceiptDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  purchaseOrderId: string;
+}
+
+/** PATCH /purchasing/receipts/:id — drafts only. */
 export class UpdateGoodsReceiptDto extends OmitType(CreateGoodsReceiptDto, ['asDraft'] as const) {}
 
 export class UpdateReceivingSettingsDto {

@@ -22,6 +22,7 @@ import { useI18n } from '@/lib/i18n';
 import type { MessageKey } from '@/lib/messages';
 import { AccessDenied } from '@/components/page-header';
 import { OrderForm } from '@/components/purchasing/order-form';
+import { AttachedReceipts } from '@/components/purchasing/attached-receipts';
 import { DeliveryBadge, deliveryStatusOf } from '@/components/purchasing/delivery';
 import { takeFlash, type Flash } from '@/components/purchasing/flash';
 import {
@@ -204,7 +205,7 @@ export default function PurchaseOrderPage() {
           }}
         />
       ) : (
-        <ReadOnlyOrder order={order} />
+        <ReadOnlyOrder order={order} onChanged={load} />
       )}
 
       <Modal
@@ -311,7 +312,13 @@ function Progress({ status }: { status: PurchaseOrderStatus }) {
 
 // ── Read-only view (confirmed and later) ─────────────────────────────────────
 
-function ReadOnlyOrder({ order }: { order: PurchaseOrderDetail }) {
+function ReadOnlyOrder({
+  order,
+  onChanged,
+}: {
+  order: PurchaseOrderDetail;
+  onChanged: () => void;
+}) {
   const { t, money, qty, date, dateTime } = useI18n();
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -447,34 +454,7 @@ function ReadOnlyOrder({ order }: { order: PurchaseOrderDetail }) {
           )}
         </section>
 
-        <section
-          className="animate-rise rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-          style={{ animationDelay: '240ms' }}
-        >
-          <h2 className="font-semibold text-slate-900">{t('pop.receipts')}</h2>
-          {order.receipts.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">
-              {order.status === 'CONFIRMED' ? t('pop.noReceiptOpen') : t('pop.noReceipt')}
-            </p>
-          ) : (
-            <ul className="mt-2 divide-y divide-slate-100 text-sm">
-              {order.receipts.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    href={`/purchasing/receipts/${r.id}`}
-                    className="group -mx-2 flex items-center justify-between rounded-lg px-2 py-2 transition hover:bg-amber-50"
-                  >
-                    <span className="inline-flex items-center gap-2 font-mono text-xs font-semibold text-slate-800 group-hover:text-orange-700">
-                      <PackageCheck className="size-4 text-emerald-600" />
-                      {r.number}
-                    </span>
-                    <span className="text-slate-500">{dateTime(r.receivedAt)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <AttachedReceipts order={order} onChanged={onChanged} />
       </aside>
     </div>
   );

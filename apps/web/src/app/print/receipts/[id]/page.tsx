@@ -115,7 +115,11 @@ export default function PrintReceiptPage() {
               <tbody>
                 <Row
                   k={t('grp.order')}
-                  v={`${r.purchaseOrder.number} (${date(r.purchaseOrderDate)})`}
+                  v={
+                    r.purchaseOrder
+                      ? `${r.purchaseOrder.number} (${date(r.purchaseOrderDate)})`
+                      : t('grr.notAttached')
+                  }
                 />
                 <Row k={t('grf.bl')} v={r.supplierRef ?? '—'} />
                 <Row k={t('grp.warehouse')} v={`${r.warehouse.code} · ${r.warehouse.name}`} />
@@ -135,7 +139,7 @@ export default function PrintReceiptPage() {
               <Th>{t('grr.lot')}</Th>
               <Th>{t('grr.expiry')}</Th>
               <Th>{t('grr.quality')}</Th>
-              <Th right>{t('grp.col.cost')}</Th>
+              <Th right>{t('grr.unitPrice')}</Th>
               <Th right>{t('grp.col.value')}</Th>
             </tr>
           </thead>
@@ -162,7 +166,7 @@ export default function PrintReceiptPage() {
                     <div className="text-[10px] text-slate-500">{l.rejectReason}</div>
                   )}
                 </Td>
-                <Td right>{money(l.unitCost)}</Td>
+                <Td right>{money(l.unitPrice)}</Td>
                 <Td right>{money(l.value)}</Td>
               </tr>
             ))}

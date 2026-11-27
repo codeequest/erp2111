@@ -231,14 +231,18 @@ export default function GoodsReceiptPage() {
             <Info
               label={t('grp.order')}
               value={
-                <Link
-                  href={`/purchasing/orders/${r.purchaseOrder.id}`}
-                  className="inline-flex items-center gap-1 font-mono text-xs font-semibold hover:text-orange-700 hover:underline"
-                >
-                  <ClipboardList className="size-3.5" /> {r.purchaseOrder.number}
-                </Link>
+                r.purchaseOrder ? (
+                  <Link
+                    href={`/purchasing/orders/${r.purchaseOrder.id}`}
+                    className="inline-flex items-center gap-1 font-mono text-xs font-semibold hover:text-orange-700 hover:underline"
+                  >
+                    <ClipboardList className="size-3.5" /> {r.purchaseOrder.number}
+                  </Link>
+                ) : (
+                  <span className="text-slate-400">{t('grr.notAttached')}</span>
+                )
               }
-              sub={date(r.purchaseOrderDate)}
+              sub={r.purchaseOrderDate ? date(r.purchaseOrderDate) : undefined}
             />
             <Info label={t('grp.warehouse')} value={`${r.warehouse.code} · ${r.warehouse.name}`} />
             <Info label={t('grp.by')} value={r.createdBy.fullName} />
@@ -304,7 +308,7 @@ export default function GoodsReceiptPage() {
                 <th className="px-3 py-2.5">{t('grr.lot')}</th>
                 <th className="px-3 py-2.5">{t('grr.expiry')}</th>
                 <th className="px-3 py-2.5">{t('grr.quality')}</th>
-                <th className="px-3 py-2.5 text-right">{t('grp.col.cost')}</th>
+                <th className="px-3 py-2.5 text-right">{t('grr.unitPrice')}</th>
                 <th className="px-4 py-2.5 text-right">{t('grp.col.value')}</th>
               </tr>
             </thead>
@@ -376,7 +380,8 @@ export default function GoodsReceiptPage() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-right whitespace-nowrap text-slate-600 tabular-nums">
-                      {money(l.unitCost)}
+                      {money(l.unitPrice)}
+                      <span className="text-xs text-slate-400"> / {l.unit.code}</span>
                     </td>
                     <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-slate-900 tabular-nums">
                       {money(l.value)}

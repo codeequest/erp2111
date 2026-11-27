@@ -33,12 +33,11 @@ export async function refreshLastPurchaseCost(
       ORDER BY r.received_at DESC, r.posted_at DESC NULLS LAST
       LIMIT 1`;
     const [bill] = await tx.$queryRaw<{ cost: Prisma.Decimal; at: Date }[]>`
-      SELECT ROUND(il.line_subtotal / il.quantity / COALESCE(pol.unit_factor, 1), 4) AS cost,
+      SELECT ROUND(il.line_subtotal / il.quantity / COALESCE(grl.unit_factor, 1), 4) AS cost,
              i.issue_date AS at
       FROM invoice_lines il
       JOIN invoices i ON i.id = il.invoice_id
       LEFT JOIN goods_receipt_lines grl ON grl.id = il.goods_receipt_line_id
-      LEFT JOIN purchase_order_lines pol ON pol.id = grl.purchase_order_line_id
       WHERE il.product_id = ${productId}::uuid
         AND i.type = 'SUPPLIER_BILL'
         AND i.status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')

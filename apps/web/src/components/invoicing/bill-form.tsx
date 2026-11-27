@@ -68,11 +68,11 @@ interface FormLine {
   /** Received line details, for the hints */
   from?: {
     receipt: string;
-    order: string;
+    order: string | null;
     unit: string;
     toBill: number;
-    orderPrice: string;
-    orderDiscount: string;
+    /** Price on the receipt (net, before VAT) */
+    receiptPrice: string;
   };
 }
 
@@ -129,11 +129,10 @@ export function BillForm({
         from: l.receiptLine
           ? {
               receipt: l.receiptLine.receipt.number,
-              order: l.receiptLine.purchaseOrder.number,
+              order: l.receiptLine.purchaseOrder?.number ?? null,
               unit: l.receiptLine.unit.code,
               toBill: Number(l.receiptLine.receivedQty) - Number(l.receiptLine.billedElsewhere),
-              orderPrice: l.receiptLine.orderPrice,
-              orderDiscount: l.receiptLine.orderDiscountPct,
+              receiptPrice: l.receiptLine.receiptPrice,
             }
           : undefined,
       })) ?? [],
@@ -193,15 +192,14 @@ export function BillForm({
       description: l.product.name,
       quantity: String(Number(l.toBill)),
       unitPrice: String(Number(l.unitPrice)),
-      discountPct: String(Number(l.discountPct)),
+      discountPct: '',
       taxRateId: taxFor(l.taxRate),
       from: {
         receipt: l.receipt.number,
-        order: l.purchaseOrder.number,
+        order: l.purchaseOrder?.number ?? null,
         unit: l.unit.code,
         toBill: Number(l.toBill),
-        orderPrice: l.unitPrice,
-        orderDiscount: l.discountPct,
+        receiptPrice: l.unitPrice,
       },
     };
   }
@@ -532,7 +530,8 @@ export function BillForm({
                         {r.number} <ExternalLink className="size-3" />
                       </Link>
                       <p className="text-xs text-slate-400">
-                        {r.purchaseOrder.number} · {date(r.receivedAt)}
+                        {r.purchaseOrder ? `${r.purchaseOrder.number} · ` : ''}
+                        {date(r.receivedAt)}
                       </p>
                     </div>
                     <button
@@ -639,12 +638,13 @@ export function BillForm({
               <tbody className="divide-y divide-slate-100">
                 {lines.map((l, i) => {
                   const err = submitted ? lineErrors[i] : null;
-                  // Order prices are in the company currency: compare only in it.
+                  // Receipt prices are in the company currency: compare only in it (net of discount).
+                  const net = (Number(l.unitPrice || 0) * (100 - Number(l.discountPct || 0))) / 100;
                   const priceDiff =
                     l.from &&
                     currency === lookups?.companyCurrency &&
                     l.unitPrice !== '' &&
-                    Number(l.unitPrice) !== Number(l.from.orderPrice);
+                    Math.abs(net - Number(l.from.receiptPrice)) > 1e-6;
                   return (
                     <tr
                       key={l.key}
@@ -663,7 +663,8 @@ export function BillForm({
                         />
                         {l.from && (
                           <p className="mt-1 text-[11px] text-slate-400">
-                            {l.from.receipt} · {l.from.order} ·{' '}
+                            {l.from.receipt}
+                            {l.from.order ? ` · ${l.from.order}` : ''} ·{' '}
                             {t('bill.leftToBill', { n: qty(l.from.toBill), unit: l.from.unit })}
                           </p>
                         )}
@@ -710,7 +711,7 @@ export function BillForm({
                           <p className="animate-fade mt-1 flex items-center justify-end gap-1 text-[11px] text-amber-700">
                             <AlertTriangle className="size-3" />
                             {t('bill.orderPrice', {
-                              price: show(String(Number(l.from!.orderPrice))),
+                              price: show(String(Number(l.from!.receiptPrice))),
                             })}
                           </p>
                         )}

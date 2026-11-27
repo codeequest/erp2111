@@ -230,7 +230,7 @@ export default function BillPage() {
                   line: w.lineNo,
                   billed: w.kind === 'price' ? fmt(w.billed, c) : qty(w.billed),
                   expected: w.kind === 'price' ? fmt(w.expected, c) : qty(w.expected),
-                  order: w.purchaseOrderNumber,
+                  receipt: w.receiptNumber,
                 })}
               </li>
             ))}
@@ -284,7 +284,7 @@ export default function BillPage() {
                           >
                             {l.receiptLine.receipt.number}
                           </Link>{' '}
-                          · {l.receiptLine.purchaseOrder.number}
+                          {l.receiptLine.purchaseOrder && ` · ${l.receiptLine.purchaseOrder.number}`}
                         </p>
                       )}
                     </td>

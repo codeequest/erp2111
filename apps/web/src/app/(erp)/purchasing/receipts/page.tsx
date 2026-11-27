@@ -323,9 +323,13 @@ function GoodsReceipts() {
                       </p>
                     </td>
                     <td className="hidden px-4 py-3 md:table-cell">
-                      <span className="font-mono text-xs whitespace-nowrap text-slate-600">
-                        {r.purchaseOrder.number}
-                      </span>
+                      {r.purchaseOrder ? (
+                        <span className="font-mono text-xs whitespace-nowrap text-slate-600">
+                          {r.purchaseOrder.number}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">{t('grr.notAttached')}</span>
+                      )}
                     </td>
                     <td className="hidden px-4 py-3 font-mono text-xs text-slate-600 lg:table-cell">
                       {r.supplierRef ?? <span className="text-slate-300">—</span>}

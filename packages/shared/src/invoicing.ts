@@ -75,15 +75,14 @@ export interface BillLineDto {
   receiptLine: {
     id: string;
     receipt: { id: string; number: string };
-    purchaseOrder: { id: string; number: string };
+    purchaseOrder: { id: string; number: string } | null;
     unit: { id: string; code: string };
-    /** Received (posted) quantity, in the order line's unit */
+    /** Received (posted) quantity, in the receipt line's unit */
     receivedQty: string;
     /** Already billed on other posted bills */
     billedElsewhere: string;
-    /** Order price and discount, to compare */
-    orderPrice: string;
-    orderDiscountPct: string;
+    /** Price entered on the receipt (before VAT), to compare */
+    receiptPrice: string;
   } | null;
 }
 
@@ -98,12 +97,12 @@ export interface BillPaymentRef {
 /** A difference between the bill and the order / receipt (shown, not blocking). */
 export interface BillWarning {
   lineNo: number;
-  kind: 'price' | 'discount' | 'quantity';
-  /** What the bill says */
+  kind: 'price' | 'quantity';
+  /** What the bill says (net unit price, or quantity) */
   billed: string;
-  /** What the order / receipt says (price, discount %, or quantity left to bill) */
+  /** What the receipt says (its price, or the quantity left to bill) */
   expected: string;
-  purchaseOrderNumber: string;
+  receiptNumber: string;
   /** English sentence (logs, API clients); the web app builds its own from the fields */
   message: string;
 }
@@ -161,16 +160,16 @@ export interface BillInput {
 export interface BillableReceiptLine {
   goodsReceiptLineId: string;
   receipt: { id: string; number: string; receivedAt: string };
-  purchaseOrder: { id: string; number: string };
+  purchaseOrder: { id: string; number: string } | null;
   product: { id: string; sku: string; name: string };
   unit: { id: string; code: string };
   receivedQty: string;
   billedQty: string;
   /** receivedQty − billedQty */
   toBill: string;
+  /** Price entered on the receipt, before VAT */
   unitPrice: string;
-  discountPct: string;
-  /** Tax % of the order line */
+  /** VAT % of the product (0 when it has none) */
   taxRate: string;
 }
 
@@ -178,7 +177,7 @@ export interface BillableReceipt {
   id: string;
   number: string;
   receivedAt: string;
-  purchaseOrder: { id: string; number: string };
+  purchaseOrder: { id: string; number: string } | null;
   /** Supplier invoice recorded on the receipt, if any (suggested as supplier ref) */
   supplierInvoiceNumber: string | null;
   supplierInvoiceDate: string | null;

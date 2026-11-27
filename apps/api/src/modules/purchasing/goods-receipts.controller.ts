@@ -16,6 +16,7 @@ import type {
   DeliveryListItem,
   GoodsReceiptDetail,
   GoodsReceiptListItem,
+  AttachableReceipt,
   GoodsReceiptSummary,
   Paginated,
   ReceivingSettings,
@@ -25,6 +26,7 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 import { RequestUser } from '../../common/types/request-user';
 import { XLSX_MIME, writeXlsx } from '../../common/xlsx';
 import {
+  AttachReceiptDto,
   CancelGoodsReceiptDto,
   CreateGoodsReceiptDto,
   ExportDeliveriesQueryDto,
@@ -59,6 +61,17 @@ export class GoodsReceiptsController {
   @ApiOperation({ summary: 'Receipts this month and orders waiting to be received' })
   summary(): Promise<GoodsReceiptSummary> {
     return this.receipts.summary();
+  }
+
+  @Get('attachable')
+  @RequirePermissions('purchasing.order.read')
+  @ApiOperation({
+    summary: "Validated receipts of an order's supplier that are not attached to an order yet",
+  })
+  attachable(
+    @Query('purchaseOrderId', ParseUUIDPipe) purchaseOrderId: string,
+  ): Promise<AttachableReceipt[]> {
+    return this.receipts.attachable(purchaseOrderId);
   }
 
   @Get('settings')
@@ -130,7 +143,7 @@ export class GoodsReceiptsController {
       [fr ? 'Bon de réception' : 'Goods receipt', r.number],
       [fr ? 'Statut' : 'Status', r.status],
       [fr ? 'Date de réception' : 'Received on', r.receivedAt.slice(0, 10)],
-      [fr ? 'Bon de commande' : 'Purchase order', r.purchaseOrder.number],
+      [fr ? 'Bon de commande' : 'Purchase order', r.purchaseOrder?.number ?? null],
       [fr ? 'Date de commande' : 'Order date', r.purchaseOrderDate],
       [fr ? 'BL fournisseur' : 'Supplier delivery note', r.supplierRef],
       [fr ? 'Dépôt' : 'Warehouse', `${r.warehouse.code} · ${r.warehouse.name}`],
@@ -157,7 +170,7 @@ export class GoodsReceiptsController {
           'Péremption',
           'Qualité',
           'Observation',
-          'Coût unitaire',
+          'Prix unitaire HT',
           'Valeur HT',
         ]
       : [
@@ -172,7 +185,7 @@ export class GoodsReceiptsController {
           'Expiry',
           'Quality',
           'Observation',
-          'Unit cost',
+          'Unit price excl. VAT',
           'Value excl. VAT',
         ];
     const file = await writeXlsx([
@@ -192,7 +205,7 @@ export class GoodsReceiptsController {
             l.expiryDate,
             quality(l.quality),
             l.rejectReason,
-            num(l.unitCost),
+            num(l.unitPrice),
             num(l.value),
           ]),
         ],
@@ -228,7 +241,7 @@ export class GoodsReceiptsController {
   @RequirePermissions('purchasing.receipt.create')
   @ApiOperation({
     summary:
-      'Receive goods against a confirmed PO (partial allowed): posted at once (stock IN, costs, PO status), or saved as a draft with asDraft',
+      'Receive goods from a supplier (products entered or scanned): posted at once (stock IN, costs), or saved as a draft with asDraft',
   })
   create(
     @Body() dto: CreateGoodsReceiptDto,
@@ -280,6 +293,29 @@ export class GoodsReceiptsController {
     @CurrentUser() user: RequestUser,
   ): Promise<GoodsReceiptDetail> {
     return this.receipts.cancel(id, dto, user);
+  }
+
+  @Post(':id/attach')
+  @RequirePermissions('purchasing.receipt.create')
+  @ApiOperation({
+    summary: "Attach a validated receipt to an order: the order's received quantities follow",
+  })
+  attach(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AttachReceiptDto,
+    @CurrentUser() user: RequestUser,
+  ): Promise<GoodsReceiptDetail> {
+    return this.receipts.attach(id, dto, user);
+  }
+
+  @Post(':id/detach')
+  @RequirePermissions('purchasing.receipt.create')
+  @ApiOperation({ summary: 'Detach a receipt from its order' })
+  detach(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: RequestUser,
+  ): Promise<GoodsReceiptDetail> {
+    return this.receipts.detach(id, user);
   }
 
   @Patch(':id/invoice')

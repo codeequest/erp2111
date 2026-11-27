@@ -374,15 +374,15 @@ export class PurchasingExportService {
       orderBy: [{ receivedAt: 'desc' }, { number: 'desc' }],
       take: MAX_ROWS,
       include: {
-        purchaseOrder: {
-          select: { number: true, supplier: { select: { code: true, name: true } } },
-        },
+        purchaseOrder: { select: { number: true } },
+        supplier: { select: { code: true, name: true } },
         warehouse: { select: { code: true } },
         createdBy: { select: { fullName: true } },
         lines: {
+          orderBy: { lineNo: 'asc' },
           include: {
             product: { select: { sku: true, name: true, baseUnit: { select: { code: true } } } },
-            purchaseOrderLine: { select: { lineNo: true, unit: { select: { code: true } } } },
+            unit: { select: { code: true } },
           },
         },
       },
@@ -397,9 +397,9 @@ export class PurchasingExportService {
           ...receipts.map((r) => [
             r.number,
             toDateString(r.receivedAt),
-            r.purchaseOrder.number,
-            r.purchaseOrder.supplier.code,
-            r.purchaseOrder.supplier.name,
+            r.purchaseOrder?.number ?? null,
+            r.supplier.code,
+            r.supplier.name,
             r.supplierRef,
             r.supplierInvoiceNumber,
             r.supplierInvoiceDate ? toDateString(r.supplierInvoiceDate) : null,
@@ -418,21 +418,19 @@ export class PurchasingExportService {
         rows: [
           tx.receiptLineCols,
           ...receipts.flatMap((r) =>
-            [...r.lines]
-              .sort((a, b) => a.purchaseOrderLine.lineNo - b.purchaseOrderLine.lineNo)
-              .map((l) => [
-                r.number,
-                toDateString(r.receivedAt),
-                r.purchaseOrder.number,
-                l.product.sku,
-                l.product.name,
-                n(l.quantity),
-                l.purchaseOrderLine.unit.code,
-                n(l.baseQuantity),
-                l.product.baseUnit.code,
-                n(l.unitCost),
-                n(l.value),
-              ]),
+            r.lines.map((l) => [
+              r.number,
+              toDateString(r.receivedAt),
+              r.purchaseOrder?.number ?? null,
+              l.product.sku,
+              l.product.name,
+              n(l.quantity),
+              l.unit.code,
+              n(l.baseQuantity),
+              l.product.baseUnit.code,
+              n(l.unitCost),
+              n(l.value),
+            ]),
           ),
         ],
         widths: [16, 12, 16, 16, 32, 11, 8, 13, 10, 14, 14],
