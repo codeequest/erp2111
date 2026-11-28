@@ -70,6 +70,13 @@ export const NAVIGATION: NavModule[] = [
         description: 'Move stock between warehouses',
       },
       {
+        key: 'counts',
+        label: 'Stock counts',
+        href: '/inventory/counts',
+        permission: 'inventory.stock.adjust',
+        description: 'Count the goods on the shelves and fix the differences',
+      },
+      {
         key: 'warehouses',
         label: 'Warehouses',
         href: '/inventory/warehouses',

@@ -48,8 +48,8 @@ export default function ErpLayout({ children }: { children: React.ReactNode }) {
         />
         <aside
           className={clsx(
-            'absolute inset-y-0 left-0 w-64 transition-transform',
-            menuOpen ? 'translate-x-0' : '-translate-x-full',
+            'absolute inset-y-0 start-0 w-64 transition-transform',
+            menuOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full',
           )}
         >
           <Sidebar onNavigate={() => setMenuOpen(false)} />

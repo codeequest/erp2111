@@ -42,6 +42,7 @@ import {
 } from '@/components/products/ui';
 import { BulkBar } from '@/components/products/bulk-bar';
 
+import { tr } from '@/lib/i18n';
 const PAGE_SIZE = 25;
 
 export default function ProductsPage() {
@@ -124,7 +125,7 @@ export default function ProductsPage() {
     setExporting(true);
     setNotice(null);
     try {
-      await apiDownload(`/inventory/products/export?${filterParams()}`, 'products.csv');
+      await apiDownload(`/inventory/products/export?${filterParams()}`, 'products.xlsx');
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -173,16 +174,16 @@ export default function ProductsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <Breadcrumbs trail={[{ label: 'Products' }]} />
+        <Breadcrumbs trail={[{ label: tr("Products") }]} />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center rounded-lg bg-mod-inventory/10">
               <Package className="size-5 text-mod-inventory" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Products</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">{tr("Products")}</h1>
               <p className="text-sm text-slate-500">
-                {data ? `${data.total} product${data.total === 1 ? '' : 's'}` : 'Product catalogue'}
+                {data ? `${data.total} product${data.total === 1 ? '' : 's'}` : tr("Product catalogue")}
               </p>
             </div>
           </div>
@@ -193,23 +194,18 @@ export default function ProductsPage() {
               ) : (
                 <Download className="size-4" />
               )}
-              Export
-            </button>
+              {tr("Export")}</button>
             {canWrite && (
               <Link href="/inventory/products/import" className={btnSecondary}>
-                <Upload className="size-4" /> Import
-              </Link>
+                <Upload className="size-4" /> {' '}{tr("Import")}</Link>
             )}
             <Link href="/inventory/products/price-lists" className={btnSecondary}>
-              <Tags className="size-4" /> Price lists
-            </Link>
+              <Tags className="size-4" /> {' '}{tr("Price lists")}</Link>
             <Link href="/inventory/products/setup" className={btnSecondary}>
-              <Settings2 className="size-4" /> Catalogue setup
-            </Link>
+              <Settings2 className="size-4" /> {' '}{tr("Catalogue setup")}</Link>
             {canWrite && (
               <Link href="/inventory/products/new" className={btnPrimary}>
-                <Plus className="size-4" /> New product
-              </Link>
+                <Plus className="size-4" /> {' '}{tr("New product")}</Link>
             )}
           </div>
         </div>
@@ -219,14 +215,14 @@ export default function ProductsPage() {
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-3">
           <div className="relative min-w-[14rem] flex-1 sm:max-w-sm">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute top-1/2 start-3 size-4 -translate-y-1/2 text-slate-400" />
             <input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={onSearchKey}
-              placeholder="Search, or scan a barcode and press Enter…"
-              aria-label="Search products"
-              className={clsx(inputClass, 'py-1.5 pl-9')}
+              placeholder={tr("Search, or scan a barcode and press Enter…")}
+              aria-label={tr("Search products")}
+              className={clsx(inputClass, 'py-1.5 ps-9')}
             />
           </div>
           <select
@@ -235,10 +231,10 @@ export default function ProductsPage() {
               setCategoryId(e.target.value);
               setPage(1);
             }}
-            aria-label="Filter by category"
+            aria-label={tr("Filter by category")}
             className={clsx(fieldClass, 'py-1.5')}
           >
-            <option value="">All categories</option>
+            <option value="">{tr("All categories")}</option>
             {lookups?.categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {'  '.repeat(c.depth)}
@@ -276,8 +272,7 @@ export default function ProductsPage() {
                 : 'border-slate-200 text-slate-600 hover:bg-slate-50',
             )}
           >
-            <AlertTriangle className="size-4" /> Low stock
-          </button>
+            <AlertTriangle className="size-4" /> {' '}{tr("Low stock")}</button>
           {loading && <Loader2 className="size-4 animate-spin text-slate-400" />}
         </div>
 
@@ -317,13 +312,13 @@ export default function ProductsPage() {
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-medium tracking-wide text-slate-500 uppercase">
+            <thead className="bg-slate-50 text-start text-xs font-medium tracking-wide text-slate-500 uppercase">
               <tr>
                 {canWrite && (
-                  <th className="w-10 pl-4">
+                  <th className="w-10 ps-4">
                     <input
                       type="checkbox"
-                      aria-label="Select all on this page"
+                      aria-label={tr("Select all on this page")}
                       checked={!!data?.items.length && data.items.every((i) => selected.has(i.id))}
                       onChange={(e) =>
                         setSelected(
@@ -334,20 +329,20 @@ export default function ProductsPage() {
                   </th>
                 )}
                 <SortTh field="sku" label="SKU" sort={sort} order={order} onSort={toggleSort} />
-                <SortTh field="name" label="Name" sort={sort} order={order} onSort={toggleSort} />
-                <th className="px-4 py-2.5">Category</th>
-                <th className="px-4 py-2.5">Unit</th>
+                <SortTh field="name" label={tr("Name")} sort={sort} order={order} onSort={toggleSort} />
+                <th className="px-4 py-2.5">{tr("Category")}</th>
+                <th className="px-4 py-2.5">{tr("Unit")}</th>
                 <SortTh
                   field="salePrice"
-                  label="Sale price"
+                  label={tr("Sale price")}
                   sort={sort}
                   order={order}
                   onSort={toggleSort}
                   align="right"
                 />
-                {canSeeCost && <th className="px-4 py-2.5 text-right">Avg. cost</th>}
-                <th className="px-4 py-2.5 text-right">On hand</th>
-                <th className="px-4 py-2.5">Status</th>
+                {canSeeCost && <th className="px-4 py-2.5 text-end">{tr("Avg. cost")}</th>}
+                <th className="px-4 py-2.5 text-end">{tr("On hand")}</th>
+                <th className="px-4 py-2.5">{tr("Status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -363,10 +358,10 @@ export default function ProductsPage() {
                     )}
                   >
                     {canWrite && (
-                      <td className="pl-4" onClick={(e) => e.stopPropagation()}>
+                      <td className="ps-4" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          aria-label={`Select ${p.name}`}
+                          aria-label={tr('Select {name}', { name: p.name })}
                           checked={selected.has(p.id)}
                           onChange={() => toggleRow(p.id)}
                         />
@@ -401,20 +396,20 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">{p.category?.name ?? '—'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{p.baseUnit.code}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
+                    <td className="px-4 py-2.5 text-end tabular-nums">
                       {formatMoney(p.salePrice)}
                     </td>
                     {canSeeCost && (
-                      <td className="px-4 py-2.5 text-right text-slate-600 tabular-nums">
+                      <td className="px-4 py-2.5 text-end text-slate-600 tabular-nums">
                         {formatMoney(p.averageCost)}
                       </td>
                     )}
                     <td
                       className={clsx(
-                        'px-4 py-2.5 text-right tabular-nums',
+                        'px-4 py-2.5 text-end tabular-nums',
                         low ? 'font-medium text-amber-600' : 'text-slate-700',
                       )}
-                      title={low ? `Below minimum stock (${formatQty(p.minStock)})` : undefined}
+                      title={low ? tr('Below minimum stock ({qty})', { qty: formatQty(p.minStock) }) : undefined}
                     >
                       {formatQty(p.stockOnHand)}
                     </td>
@@ -433,17 +428,16 @@ export default function ProductsPage() {
                 <Package className="size-6 text-mod-inventory" />
               </div>
               <h2 className="mt-4 font-semibold text-slate-900">
-                {filtered ? 'No products match your filters' : 'No products yet'}
+                {filtered ? tr("No products match your filters") : tr("No products yet")}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 {filtered
-                  ? 'Try another search or clear the filters.'
-                  : 'Create your first product to start building the catalogue.'}
+                  ? tr("Try another search or clear the filters.")
+                  : tr("Create your first product to start building the catalogue.")}
               </p>
               {!filtered && canWrite && (
                 <Link href="/inventory/products/new" className={clsx(btnPrimary, 'mt-4')}>
-                  <Plus className="size-4" /> New product
-                </Link>
+                  <Plus className="size-4" /> {' '}{tr("New product")}</Link>
               )}
             </div>
           )}
@@ -454,27 +448,27 @@ export default function ProductsPage() {
           <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2.5 text-sm text-slate-600">
             <span>
               {(data.page - 1) * data.pageSize + 1}–
-              {Math.min(data.page * data.pageSize, data.total)} of {data.total}
+              {Math.min(data.page * data.pageSize, data.total)} {' '}{tr("of")}{' '}{data.total}
             </span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage(page - 1)}
                 disabled={page <= 1}
-                aria-label="Previous page"
+                aria-label={tr("Previous page")}
                 className="rounded p-1.5 hover:bg-slate-100 disabled:opacity-40"
               >
-                <ChevronLeft className="size-4" />
+                <ChevronLeft className="rtl:-scale-x-100 size-4" />
               </button>
               <span className="px-2">
-                Page {page} of {totalPages}
+                {tr("Page")}{' '}{page} {' '}{tr("of")}{' '}{totalPages}
               </span>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={page >= totalPages}
-                aria-label="Next page"
+                aria-label={tr("Next page")}
                 className="rounded p-1.5 hover:bg-slate-100 disabled:opacity-40"
               >
-                <ChevronRight className="size-4" />
+                <ChevronRight className="rtl:-scale-x-100 size-4" />
               </button>
             </div>
           </div>
@@ -503,7 +497,7 @@ function SortTh({
   const Arrow = order === 'asc' ? ArrowUp : ArrowDown;
   return (
     <th
-      className={clsx('px-4 py-2.5', align === 'right' && 'text-right')}
+      className={clsx('px-4 py-2.5', align === 'right' && 'text-end')}
       aria-sort={active ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button

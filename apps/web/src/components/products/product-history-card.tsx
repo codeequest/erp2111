@@ -6,6 +6,7 @@ import type { HistoryEntry } from '@erp/shared';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
+import { tr } from '@/lib/i18n';
 const FIELD_LABELS: Record<string, string> = {
   sku: 'SKU',
   barcode: 'Barcode',
@@ -56,33 +57,32 @@ export function ProductHistoryCard({ productId, version }: { productId: string; 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-        <History className="size-4 text-slate-400" /> Change history
-      </h2>
+        <History className="size-4 text-slate-400" /> {' '}{tr("Change history")}</h2>
       {error ? (
         <p className="text-sm text-red-600">{error}</p>
       ) : !visible ? (
         <Loader2 className="mx-auto size-5 animate-spin text-slate-400" />
       ) : visible.length === 0 ? (
-        <p className="text-sm text-slate-500">No changes recorded.</p>
+        <p className="text-sm text-slate-500">{tr("No changes recorded.")}</p>
       ) : (
-        <ol className="relative space-y-4 border-l border-slate-200 pl-4">
+        <ol className="relative space-y-4 border-s border-slate-200 ps-4">
           {visible.map((h) => (
             <li key={h.id} className="relative">
-              <span className="absolute top-1.5 -left-[1.3rem] size-2 rounded-full bg-slate-300 ring-4 ring-white" />
+              <span className="absolute top-1.5 -start-[1.3rem] size-2 rounded-full bg-slate-300 ring-4 ring-white" />
               <p className="text-sm">
                 <span className="font-medium text-slate-900">
-                  {ACTION_LABELS[h.action] ?? h.action}
+                  {tr(ACTION_LABELS[h.action] ?? h.action)}
                 </span>
                 <span className="text-slate-500">
                   {' '}
-                  · {h.user ?? 'unknown user'} · {formatDateTime(h.createdAt)}
+                  · {h.user ?? tr('unknown user')} · {formatDateTime(h.createdAt)}
                 </span>
               </p>
               {h.action !== 'create' && h.changes.length > 0 && (
                 <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
                   {h.changes.map((c) => (
                     <li key={c.field}>
-                      {FIELD_LABELS[c.field] ?? c.field}:{' '}
+                      {tr(FIELD_LABELS[c.field] ?? c.field)}:{' '}
                       <span className="text-slate-400 line-through">{c.from ?? 'empty'}</span> →{' '}
                       <span className="font-medium text-slate-800">{c.to ?? 'empty'}</span>
                     </li>
@@ -98,7 +98,7 @@ export function ProductHistoryCard({ productId, version }: { productId: string; 
           onClick={() => setShowAll(!showAll)}
           className="mt-3 text-xs font-medium text-mod-inventory hover:underline"
         >
-          {showAll ? 'Show fewer' : `Show all ${entries.length} changes`}
+          {showAll ? tr("Show fewer") : tr('Show all {n} changes', { n: entries.length })}
         </button>
       )}
     </section>

@@ -9,7 +9,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/types/request-user';
 import { audit } from '../../common/audit';
-import { detectDelimiter, parseCsv, toCsv } from '../../common/csv';
+import { SheetColumn } from '../../common/spreadsheet';
 import { CatalogService } from './catalog.service';
 import { ListProductsQueryDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
@@ -61,7 +61,10 @@ export class ProductTransferService {
 
   // ── Export ─────────────────────────────────────────────────────────────────
 
-  async exportCsv(query: ListProductsQueryDto, user: RequestUser): Promise<string> {
+  async exportRows(
+    query: ListProductsQueryDto,
+    user: RequestUser,
+  ): Promise<{ columns: SheetColumn[]; rows: (string | null)[][] }> {
     const canSeeCost = user.permissions.has('inventory.cost.view');
     const where = await this.products.buildWhere(query);
     const rows = await this.prisma.product.findMany({
@@ -89,7 +92,15 @@ export class ProductTransferService {
       if (canSeeCost) line.push(p.averageCost.toString());
       return line;
     });
-    return toCsv([header, ...lines]);
+    const numeric = new Set(['sale_price', 'min_stock', 'average_cost']);
+    return {
+      columns: header.map((h) => ({
+        header: h,
+        numeric: numeric.has(h),
+        width: h === 'name' || h === 'description' || h === 'category' ? 30 : undefined,
+      })),
+      rows: lines,
+    };
   }
 
   // ── Import ─────────────────────────────────────────────────────────────────
@@ -101,9 +112,7 @@ export class ProductTransferService {
    * With dryRun nothing is written; otherwise the valid rows are written in a
    * single transaction and the invalid ones are skipped.
    */
-  async importCsv(text: string, dryRun: boolean, user: RequestUser): Promise<ImportReport> {
-    const delimiter = detectDelimiter(text);
-    const table = parseCsv(text, delimiter);
+  async importTable(table: string[][], dryRun: boolean, user: RequestUser): Promise<ImportReport> {
     if (table.length < 2) throw new BadRequestException('The file has no product rows');
     if (table.length - 1 > MAX_IMPORT_ROWS) {
       throw new BadRequestException(`At most ${MAX_IMPORT_ROWS} rows can be imported at once`);
@@ -121,8 +130,8 @@ export class ProductTransferService {
     }
 
     const ctx = await this.loadContext();
-    // Excel in comma-decimal locales writes "12,50" in ";" files.
-    const num = (v: string) => (delimiter === ';' ? v.replace(/^(\d+),(\d+)$/, '$1.$2') : v);
+    // Decimal commas of ";" CSV files are already turned into dots by readTable().
+    const num = (v: string) => v;
 
     const results: ImportRowResult[] = [];
     const planned: { values: RowValues; existing?: ExistingProduct; line: number }[] = [];

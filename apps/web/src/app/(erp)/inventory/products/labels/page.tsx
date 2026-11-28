@@ -10,9 +10,10 @@ import { formatMoney } from '@/lib/format';
 import { Barcode } from '@/components/products/barcode';
 import { Breadcrumbs, ErrorBox, btnPrimary, fieldClass } from '@/components/products/ui';
 
+import { tr } from '@/lib/i18n';
 const SIZES = {
   small: {
-    label: 'Small · 38 × 25 mm',
+    label: tr("Small · 38 × 25 mm"),
     w: 38,
     h: 25,
     bar: 22,
@@ -20,7 +21,7 @@ const SIZES = {
     price: 'text-[9pt]',
   },
   medium: {
-    label: 'Medium · 50 × 30 mm',
+    label: tr("Medium · 50 × 30 mm"),
     w: 50,
     h: 30,
     bar: 28,
@@ -28,7 +29,7 @@ const SIZES = {
     price: 'text-[11pt]',
   },
   large: {
-    label: 'Large · 70 × 40 mm',
+    label: tr("Large · 70 × 40 mm"),
     w: 70,
     h: 40,
     bar: 36,
@@ -97,17 +98,16 @@ function Labels() {
 
       <div className="print:hidden">
         <Breadcrumbs
-          trail={[{ label: 'Products', href: '/inventory/products' }, { label: 'Print labels' }]}
+          trail={[{ label: tr("Products"), href: '/inventory/products' }, { label: tr("Print labels") }]}
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Print labels</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">{tr("Print labels")}</h1>
             <p className="text-sm text-slate-500">
-              Shelf and product labels with barcode. Products without a barcode get their SKU.
-            </p>
+              {tr("Shelf and product labels with barcode. Products without a barcode get their SKU.")}</p>
           </div>
           <button onClick={() => window.print()} disabled={!sheet.length} className={btnPrimary}>
-            <Printer className="size-4" /> Print {sheet.length} label{sheet.length === 1 ? '' : 's'}
+            <Printer className="size-4" /> {' '}{tr("Print")}{' '}{sheet.length} {' '}{tr("label")}{sheet.length === 1 ? '' : 's'}
           </button>
         </div>
       </div>
@@ -116,8 +116,7 @@ function Labels() {
 
       {!ids.length ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-          No products chosen. Tick products in the product list and choose “Print labels”.
-        </div>
+          {tr("No products chosen. Tick products in the product list and choose “Print labels”.")}</div>
       ) : !labels ? (
         <Loader2 className="mx-auto my-16 size-6 animate-spin text-slate-400" />
       ) : (
@@ -126,7 +125,7 @@ function Labels() {
           <aside className="space-y-4 print:hidden">
             <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">Label size</span>
+                <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Label size")}</span>
                 <select
                   value={size}
                   onChange={(e) => setSize(e.target.value as Size)}
@@ -140,14 +139,14 @@ function Labels() {
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">Price</span>
+                <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Price")}</span>
                 <select
                   value={priceListId}
                   onChange={(e) => setPriceListId(e.target.value)}
                   className={clsx(fieldClass, 'w-full')}
                   disabled={!showPrice}
                 >
-                  <option value="">Sale price</option>
+                  <option value="">{tr("Sale price")}</option>
                   {priceLists.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -161,30 +160,28 @@ function Labels() {
                   checked={showPrice}
                   onChange={(e) => setShowPrice(e.target.checked)}
                 />
-                Show price
-              </label>
+                {tr("Show price")}</label>
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={showSku}
                   onChange={(e) => setShowSku(e.target.checked)}
                 />
-                Show SKU
-              </label>
+                {tr("Show SKU")}</label>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white">
               <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700">
-                <span>Copies</span>
+                <span>{tr("Copies")}</span>
                 <span className="flex gap-1">
                   {[1, 5, 10].map((n) => (
                     <button
                       key={n}
                       onClick={() => setCopies(Object.fromEntries(labels.map((l) => [l.id, n])))}
                       className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
-                      title={`${n} of each`}
+                      title={tr('{n} of each', { n })}
                     >
-                      all {n}
+                      {tr("all")}{' '}{n}
                     </button>
                   ))}
                 </span>
@@ -201,7 +198,7 @@ function Labels() {
                       <button
                         onClick={() => setCount(l.id, n - 1)}
                         className="rounded p-1 text-slate-500 hover:bg-slate-100"
-                        aria-label={`Fewer labels for ${l.sku}`}
+                        aria-label={tr('Fewer labels for {sku}', { sku: l.sku })}
                       >
                         <Minus className="size-3.5" />
                       </button>
@@ -211,13 +208,13 @@ function Labels() {
                           setCount(l.id, Number(e.target.value.replace(/\D/g, '')) || 0)
                         }
                         inputMode="numeric"
-                        aria-label={`Labels for ${l.sku}`}
+                        aria-label={tr('Labels for {sku}', { sku: l.sku })}
                         className={clsx(fieldClass, 'w-12 px-1 py-0.5 text-center tabular-nums')}
                       />
                       <button
                         onClick={() => setCount(l.id, n + 1)}
                         className="rounded p-1 text-slate-500 hover:bg-slate-100"
-                        aria-label={`More labels for ${l.sku}`}
+                        aria-label={tr('More labels for {sku}', { sku: l.sku })}
                       >
                         <Plus className="size-3.5" />
                       </button>
@@ -256,7 +253,7 @@ function Labels() {
                   {showPrice && (
                     <span className={clsx('font-bold whitespace-nowrap tabular-nums', s.price)}>
                       {formatMoney(l.price)}
-                      <span className="ml-0.5 text-[6pt] font-normal">/{l.unitCode}</span>
+                      <span className="ms-0.5 text-[6pt] font-normal">/{l.unitCode}</span>
                     </span>
                   )}
                 </div>
@@ -264,8 +261,7 @@ function Labels() {
             ))}
             {!sheet.length && (
               <p className="w-full py-10 text-center text-sm text-slate-500">
-                Every product is set to 0 copies.
-              </p>
+                {tr("Every product is set to 0 copies.")}</p>
             )}
           </div>
         </div>

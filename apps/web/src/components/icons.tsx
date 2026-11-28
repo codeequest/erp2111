@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  ClipboardCheck,
   Boxes,
   Building2,
   ClipboardList,
@@ -31,6 +32,7 @@ export const ITEM_ICONS: Record<string, LucideIcon> = {
   stock: Boxes,
   adjustments: SlidersHorizontal,
   transfers: ArrowLeftRight,
+  counts: ClipboardCheck,
   warehouses: Warehouse,
   suppliers: Building2,
   'purchase-orders': ClipboardList,

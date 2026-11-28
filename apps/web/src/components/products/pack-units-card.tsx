@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { formatQty } from '@/lib/format';
 import { ErrorBox, btnPrimary, btnSecondary, fieldClass } from './ui';
 
+import { tr } from '@/lib/i18n';
 const FACTOR = /^\d{1,14}(\.\d{1,4})?$/;
 
 interface Row {
@@ -64,9 +65,9 @@ export function PackUnitsCard({
   async function save() {
     setError(null);
     for (const r of rows) {
-      if (!r.unitId) return setError('Choose a unit on every line');
+      if (!r.unitId) return setError(tr("Choose a unit on every line"));
       if (!FACTOR.test(r.factor.trim()) || Number(r.factor) <= 0) {
-        return setError(`Enter how many ${base} are in one pack (a number above 0)`);
+        return setError(tr('Enter how many {unit} are in one pack (a number above 0)', { unit: base }));
       }
     }
     const body: { units: ProductPackUnitInput[] } = {
@@ -100,11 +101,10 @@ export function PackUnitsCard({
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900">Pack sizes</h2>
+        <h2 className="text-sm font-semibold text-slate-900">{tr("Pack sizes")}</h2>
         {canWrite && !editing && (
           <button onClick={startEditing} className={clsx(btnSecondary, 'px-2 py-1 text-xs')}>
-            <Pencil className="size-3.5" /> Edit
-          </button>
+            <Pencil className="size-3.5" /> {' '}{tr("Edit")}</button>
         )}
       </div>
 
@@ -117,8 +117,7 @@ export function PackUnitsCard({
       {!editing ? (
         product.packUnits.length === 0 ? (
           <p className="text-sm text-slate-500">
-            Sold and bought by the {product.baseUnit.name.toLowerCase()} ({base}) only.
-            {canWrite && ' Add a pack size such as a carton to buy or sell in bulk.'}
+            {tr("Sold and bought by the")}{' '}{product.baseUnit.name.toLowerCase()} ({base}{tr(") only.")}{canWrite && ' ' + tr('Add a pack size such as a carton to buy or sell in bulk.')}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 text-sm">
@@ -129,11 +128,11 @@ export function PackUnitsCard({
                   1 {u.unit.code} = {formatQty(u.factor)} {base}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {[u.forPurchase && 'Purchase', u.forSale && 'Sale'].filter(Boolean).join(' · ') ||
-                    'Not used'}
+                  {[u.forPurchase && tr('Purchase'), u.forSale && tr('Sale')].filter(Boolean).join(' · ') ||
+                    tr('Not used')}
                 </span>
                 {u.barcode && (
-                  <span className="ml-auto font-mono text-xs text-slate-500">{u.barcode}</span>
+                  <span className="ms-auto font-mono text-xs text-slate-500">{u.barcode}</span>
                 )}
               </li>
             ))}
@@ -142,7 +141,7 @@ export function PackUnitsCard({
       ) : (
         <div className="space-y-3">
           {rows.length === 0 && (
-            <p className="text-sm text-slate-500">No pack sizes. Add one below.</p>
+            <p className="text-sm text-slate-500">{tr("No pack sizes. Add one below.")}</p>
           )}
           {rows.map((r, i) => (
             <div
@@ -154,9 +153,9 @@ export function PackUnitsCard({
                 value={r.unitId}
                 onChange={(e) => update(i, { unitId: e.target.value })}
                 className={clsx(fieldClass, 'py-1.5')}
-                aria-label="Pack unit"
+                aria-label={tr("Pack unit")}
               >
-                <option value="">Unit…</option>
+                <option value="">{tr("Unit…")}</option>
                 {units
                   ?.filter((u) => u.id === r.unitId || !usedUnits.has(u.id))
                   .map((u) => (
@@ -171,7 +170,7 @@ export function PackUnitsCard({
                 onChange={(e) => update(i, { factor: e.target.value })}
                 inputMode="decimal"
                 className={clsx(fieldClass, 'w-20 py-1.5 tabular-nums')}
-                aria-label={`${base} per pack`}
+                aria-label={tr('{unit} per pack', { unit: base })}
                 placeholder="24"
               />
               <span className="text-slate-500">{base}</span>
@@ -179,8 +178,8 @@ export function PackUnitsCard({
                 value={r.barcode}
                 onChange={(e) => update(i, { barcode: e.target.value })}
                 className={clsx(fieldClass, 'w-40 py-1.5 font-mono text-xs')}
-                aria-label="Pack barcode"
-                placeholder="Barcode (optional)"
+                aria-label={tr("Pack barcode")}
+                placeholder={tr("Barcode (optional)")}
                 maxLength={64}
               />
               <label className="flex items-center gap-1 text-xs text-slate-600">
@@ -189,20 +188,18 @@ export function PackUnitsCard({
                   checked={r.forPurchase}
                   onChange={(e) => update(i, { forPurchase: e.target.checked })}
                 />
-                Purchase
-              </label>
+                {tr("Purchase")}</label>
               <label className="flex items-center gap-1 text-xs text-slate-600">
                 <input
                   type="checkbox"
                   checked={r.forSale}
                   onChange={(e) => update(i, { forSale: e.target.checked })}
                 />
-                Sale
-              </label>
+                {tr("Sale")}</label>
               <button
                 onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
-                className="ml-auto rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                aria-label="Remove pack size"
+                className="ms-auto rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                aria-label={tr("Remove pack size")}
               >
                 <Trash2 className="size-4" />
               </button>
@@ -219,20 +216,17 @@ export function PackUnitsCard({
               }
               disabled={!units || freeUnits.length === 0}
               title={
-                units && freeUnits.length === 0 ? 'Create more units in Catalogue setup' : undefined
+                units && freeUnits.length === 0 ? tr("Create more units in Catalogue setup") : undefined
               }
               className={clsx(btnSecondary, 'px-2 py-1 text-xs')}
             >
-              <Plus className="size-3.5" /> Add pack size
-            </button>
+              <Plus className="size-3.5" /> {' '}{tr("Add pack size")}</button>
             <div className="flex gap-2">
               <button onClick={() => setEditing(false)} className={btnSecondary}>
-                Cancel
-              </button>
+                {tr("Cancel")}</button>
               <button onClick={save} disabled={saving} className={btnPrimary}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{' '}
-                Save
-              </button>
+                {tr("Save")}</button>
             </div>
           </div>
         </div>

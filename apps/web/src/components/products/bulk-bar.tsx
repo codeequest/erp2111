@@ -13,6 +13,7 @@ import type {
 import { api } from '@/lib/api';
 import { fieldClass } from './ui';
 
+import { tr } from '@/lib/i18n';
 const PERCENT = /^-?\d{1,4}(\.\d{1,2})?$/;
 
 /** Toolbar shown above the product table while rows are selected. */
@@ -45,8 +46,8 @@ export function BulkBar({
       setMode(null);
       setPercent('');
       onDone(
-        `${res.updated} product${res.updated === 1 ? '' : 's'} updated` +
-          (res.skipped ? `, ${res.skipped} already up to date` : ''),
+        tr('{n} product(s) updated.', { n: res.updated }) +
+          (res.skipped ? ' ' + tr('{n} already up to date.', { n: res.skipped }) : ''),
       );
     } catch (e) {
       setError((e as Error).message);
@@ -61,7 +62,7 @@ export function BulkBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-900 px-3 py-2 text-white">
-      <span className="text-sm font-medium">{ids.length} selected</span>
+      <span className="text-sm font-medium">{ids.length} {' '}{tr("selected")}</span>
       <span className="mx-1 h-4 w-px bg-white/20" />
 
       {mode === 'category' ? (
@@ -70,9 +71,9 @@ export function BulkBar({
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             className={clsx(fieldClass, 'py-1 text-slate-900')}
-            aria-label="New category"
+            aria-label={tr("New category")}
           >
-            <option value="">No category</option>
+            <option value="">{tr("No category")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.path}
@@ -84,11 +85,9 @@ export function BulkBar({
             disabled={busy}
             className="rounded-md bg-white px-3 py-1 text-sm font-medium text-slate-900 hover:bg-slate-100"
           >
-            Apply
-          </button>
+            {tr("Apply")}</button>
           <button onClick={() => setMode(null)} className={pill}>
-            Cancel
-          </button>
+            {tr("Cancel")}</button>
         </>
       ) : mode === 'price' ? (
         <>
@@ -96,49 +95,42 @@ export function BulkBar({
             value={percent}
             onChange={(e) => setPercent(e.target.value)}
             inputMode="decimal"
-            placeholder="+5 or -10"
-            aria-label="Price change in percent"
+            placeholder={tr("+5 or -10")}
+            aria-label={tr("Price change in percent")}
             className={clsx(fieldClass, 'w-28 py-1 text-slate-900 tabular-nums')}
             autoFocus
           />
-          <span className="text-sm text-white/70">% (rounded to 2 decimals)</span>
+          <span className="text-sm text-white/70">{tr("% (rounded to 2 decimals)")}</span>
           <button
             onClick={() => run('adjustPrice', { percent: percent.trim().replace(/^\+/, '') })}
             disabled={busy || !percentValid}
             className="rounded-md bg-white px-3 py-1 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-50"
           >
-            Apply
-          </button>
+            {tr("Apply")}</button>
           <button onClick={() => setMode(null)} className={pill}>
-            Cancel
-          </button>
+            {tr("Cancel")}</button>
         </>
       ) : (
         <>
           <button onClick={() => setMode('category')} disabled={busy} className={pill}>
-            Set category
-          </button>
+            {tr("Set category")}</button>
           <button onClick={() => setMode('price')} disabled={busy} className={pill}>
-            Change price
-          </button>
+            {tr("Change price")}</button>
           <button onClick={() => run('activate')} disabled={busy} className={pill}>
-            Activate
-          </button>
+            {tr("Activate")}</button>
           <button onClick={() => run('deactivate')} disabled={busy} className={pill}>
-            Deactivate
-          </button>
+            {tr("Deactivate")}</button>
           <Link
             href={`/inventory/products/labels?ids=${ids.join(',')}`}
             className={clsx(pill, 'inline-flex items-center gap-1.5')}
           >
-            <Printer className="size-4" /> Print labels
-          </Link>
+            <Printer className="size-4" /> {' '}{tr("Print labels")}</Link>
         </>
       )}
 
       {busy && <Loader2 className="size-4 animate-spin" />}
       {error && <span className="text-sm text-red-300">{error}</span>}
-      <button onClick={onClear} className={clsx(pill, 'ml-auto')} aria-label="Clear selection">
+      <button onClick={onClear} className={clsx(pill, 'ms-auto')} aria-label={tr("Clear selection")}>
         <X className="size-4" />
       </button>
     </div>

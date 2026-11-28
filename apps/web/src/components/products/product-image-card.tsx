@@ -7,6 +7,7 @@ import type { ProductDetail } from '@erp/shared';
 import { api } from '@/lib/api';
 import { ErrorBox, btnSecondary } from './ui';
 
+import { tr } from '@/lib/i18n';
 const MAX_BYTES = 2 * 1024 * 1024;
 const ACCEPT = 'image/jpeg,image/png,image/webp';
 
@@ -28,8 +29,8 @@ export function ProductImageCard({
   async function upload(file: File | undefined) {
     if (!file) return;
     setError(null);
-    if (!ACCEPT.split(',').includes(file.type)) return setError('Choose a JPEG, PNG or WebP image');
-    if (file.size > MAX_BYTES) return setError('The image must be 2 MB or smaller');
+    if (!ACCEPT.split(',').includes(file.type)) return setError(tr("Choose a JPEG, PNG or WebP image"));
+    if (file.size > MAX_BYTES) return setError(tr("The image must be 2 MB or smaller"));
     const body = new FormData();
     body.append('file', file);
     setBusy(true);
@@ -64,7 +65,7 @@ export function ProductImageCard({
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-semibold text-slate-900">Photo</h2>
+      <h2 className="mb-3 text-sm font-semibold text-slate-900">{tr("Photo")}</h2>
       <div
         className={clsx(
           'relative grid aspect-square w-full place-items-center overflow-hidden rounded-lg bg-slate-50',
@@ -76,7 +77,7 @@ export function ProductImageCard({
         ) : (
           <div className="flex flex-col items-center text-slate-400">
             <ImageIcon className="size-8" />
-            <span className="mt-1 text-xs">No photo</span>
+            <span className="mt-1 text-xs">{tr("No photo")}</span>
           </div>
         )}
         {busy && (
@@ -109,25 +110,22 @@ export function ProductImageCard({
             disabled={busy}
             className={clsx(btnSecondary, 'px-2 py-1 text-xs')}
           >
-            <Upload className="size-3.5" /> {product.imageUrl ? 'Replace' : 'Upload'}
+            <Upload className="size-3.5" /> {product.imageUrl ? tr("Replace") : tr("Upload")}
           </button>
           {product.imageUrl &&
             (confirmRemove ? (
               <span className="flex items-center gap-1 text-xs text-slate-600">
-                Remove?
-                <button
+                {tr("Remove?")}<button
                   onClick={remove}
                   disabled={busy}
                   className="rounded bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700"
                 >
-                  Yes
-                </button>
+                  {tr("Yes")}</button>
                 <button
                   onClick={() => setConfirmRemove(false)}
                   className="rounded px-2 py-1 hover:bg-slate-100"
                 >
-                  No
-                </button>
+                  {tr("No")}</button>
               </span>
             ) : (
               <button
@@ -135,10 +133,9 @@ export function ProductImageCard({
                 disabled={busy}
                 className={clsx(btnSecondary, 'px-2 py-1 text-xs')}
               >
-                <Trash2 className="size-3.5" /> Remove
-              </button>
+                <Trash2 className="size-3.5" /> {' '}{tr("Remove")}</button>
             ))}
-          <p className="w-full text-xs text-slate-500">JPEG, PNG or WebP, up to 2 MB.</p>
+          <p className="w-full text-xs text-slate-500">{tr("JPEG, PNG or WebP, up to 2 MB.")}</p>
         </div>
       )}
     </section>

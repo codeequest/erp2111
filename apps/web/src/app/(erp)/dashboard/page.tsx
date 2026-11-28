@@ -20,6 +20,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ITEM_ICONS, MODULE_COLORS, MODULE_ICONS } from '@/components/icons';
 
+import { tr } from '@/lib/i18n';
 interface Kpi {
   key?: 'lowStock';
   label: string;
@@ -30,24 +31,24 @@ interface Kpi {
 
 // Values come from GET /api/v1/dashboard/summary once the Dashboard module is built.
 const KPIS: Kpi[] = [
-  { label: 'Sales today', icon: TrendingUp, hint: 'Sales module', permission: 'sales.order.read' },
+  { label: tr("Sales today"), icon: TrendingUp, hint: tr("Sales module"), permission: 'sales.order.read' },
   {
-    label: 'Sales this month',
+    label: tr("Sales this month"),
     icon: CircleDollarSign,
-    hint: 'Sales module',
+    hint: tr("Sales module"),
     permission: 'sales.order.read',
   },
   {
     key: 'lowStock',
-    label: 'Low-stock items',
+    label: tr("Low-stock items"),
     icon: AlertTriangle,
-    hint: 'Inventory module',
+    hint: tr("Inventory module"),
     permission: 'inventory.stock.read',
   },
   {
-    label: 'Unpaid invoices',
+    label: tr("Unpaid invoices"),
     icon: Receipt,
-    hint: 'Invoicing module',
+    hint: tr("Invoicing module"),
     permission: 'invoicing.invoice.read',
   },
 ];
@@ -61,25 +62,25 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
-    label: 'New quotation',
+    label: tr("New quotation"),
     href: '/sales/quotations/new',
     icon: FileText,
     permission: 'sales.order.write',
   },
   {
-    label: 'New purchase order',
+    label: tr("New purchase order"),
     href: '/purchasing/orders/new',
     icon: ClipboardList,
     permission: 'purchasing.order.write',
   },
   {
-    label: 'New product',
+    label: tr("New product"),
     href: '/inventory/products/new',
     icon: Package,
     permission: 'inventory.product.write',
   },
   {
-    label: 'Record payment',
+    label: tr("Record payment"),
     href: '/invoicing/payments/new',
     icon: Wallet,
     permission: 'invoicing.payment.record',
@@ -107,7 +108,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Welcome back, {firstName}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">{tr("Welcome back,")}{' '}{firstName}</h1>
         <p className="mt-1 text-sm text-slate-500">
           {new Date().toLocaleDateString(undefined, {
             weekday: 'long',
@@ -131,8 +132,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="mt-3 text-3xl font-semibold text-slate-300">—</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  Available once the {kpi.hint} is built
-                </p>
+                  {tr("Available once the")}{' '}{kpi.hint} {' '}{tr("is built")}</p>
               </div>
             ),
           )}
@@ -142,8 +142,7 @@ export default function DashboardPage() {
       {actions.length > 0 && (
         <section>
           <h2 className="mb-3 text-sm font-semibold tracking-wide text-slate-500 uppercase">
-            Quick actions
-          </h2>
+            {tr("Quick actions")}</h2>
           <div className="flex flex-wrap gap-3">
             {actions.map((a) => (
               <Link
@@ -161,8 +160,7 @@ export default function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-sm font-semibold tracking-wide text-slate-500 uppercase">
-          Modules
-        </h2>
+          {tr("Modules")}</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {modules.map((m) => {
             const Icon = MODULE_ICONS[m.key];
@@ -180,8 +178,8 @@ export default function DashboardPage() {
                     <Icon className={clsx('size-5', color.text)} />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-slate-900">{m.label}</h3>
-                    <p className="text-xs text-slate-500">{m.description}</p>
+                    <h3 className="font-semibold text-slate-900">{tr(m.label)}</h3>
+                    <p className="text-xs text-slate-500">{tr(m.description)}</p>
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
@@ -196,8 +194,8 @@ export default function DashboardPage() {
                         {ItemIcon && (
                           <ItemIcon className="size-4 text-slate-400 group-hover:text-slate-600" />
                         )}
-                        <span className="truncate">{item.label}</span>
-                        <ArrowRight className="ml-auto size-3.5 text-slate-300 opacity-0 transition group-hover:opacity-100" />
+                        <span className="truncate">{tr(item.label)}</span>
+                        <ArrowRight className="rtl:-scale-x-100 ms-auto size-3.5 text-slate-300 opacity-0 transition group-hover:opacity-100" />
                       </Link>
                     );
                   })}
@@ -238,7 +236,7 @@ function LowStockCard({ kpi, data }: { kpi: Kpi; data: LowStockSummary }) {
               .slice(0, 2)
               .map((i) => i.name)
               .join(', ') + (data.count > 2 ? ` and ${data.count - 2} more` : '')
-          : 'Every product is above its minimum'}
+          : tr("Every product is above its minimum")}
       </p>
     </Link>
   );

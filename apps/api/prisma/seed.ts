@@ -27,6 +27,7 @@ const SEQUENCE_PREFIXES: Record<DocumentType, string> = {
   PAYMENT_OUT: 'PAY',
   STOCK_ADJUSTMENT: 'ADJ',
   STOCK_TRANSFER: 'TRF',
+  STOCK_COUNT: 'CNT',
 };
 
 async function seedPermissions() {

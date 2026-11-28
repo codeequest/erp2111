@@ -1,4 +1,5 @@
 import type { ApiError, AuthResponse } from '@erp/shared';
+import { getLang } from './i18n';
 
 /**
  * Small fetch wrapper for the ERP API.
@@ -52,6 +53,7 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
     headers.set('Content-Type', 'application/json');
   }
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  headers.set('X-Lang', getLang());
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });
 
@@ -76,6 +78,7 @@ export async function api<T>(path: string, init: RequestInit = {}, retry = true)
 export async function apiDownload(path: string, fallbackName: string, retry = true): Promise<void> {
   const headers = new Headers();
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  headers.set('X-Lang', getLang());
   const res = await fetch(`${BASE}${path}`, { headers, credentials: 'include' });
   if (res.status === 401 && retry) {
     if (await refreshSession()) return apiDownload(path, fallbackName, false);

@@ -38,14 +38,17 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
 
-  stockMoves      StockMove[]
-  purchaseOrders  PurchaseOrder[]
-  goodsReceipts   GoodsReceipt[]
-  salesOrders     SalesOrder[]
-  deliveries      Delivery[]
-  customerReturns CustomerReturn[]
-  invoices        Invoice[]
-  payments        Payment[]
+  stockMoves       StockMove[]
+  purchaseOrders   PurchaseOrder[]
+  goodsReceipts    GoodsReceipt[]
+  salesOrders      SalesOrder[]
+  deliveries       Delivery[]
+  customerReturns  CustomerReturn[]
+  invoices         Invoice[]
+  payments         Payment[]
+  stockAdjustments StockAdjustment[]
+  stockTransfers   StockTransfer[]
+  stockCounts      StockCount[]
 
   @@map("users")
 }
@@ -190,6 +193,7 @@ enum DocumentType {
   PAYMENT_OUT
   STOCK_ADJUSTMENT
   STOCK_TRANSFER
+  STOCK_COUNT
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,11 +221,11 @@ model Unit {
   code String @unique
   name String
 
-  baseProducts        Product[]
-  productUnits        ProductUnit[]
-  priceListItems      PriceListItem[]
-  purchaseOrderLines  PurchaseOrderLine[]
-  salesOrderLines     SalesOrderLine[]
+  baseProducts       Product[]
+  productUnits       ProductUnit[]
+  priceListItems     PriceListItem[]
+  purchaseOrderLines PurchaseOrderLine[]
+  salesOrderLines    SalesOrderLine[]
 
   @@map("units")
 }
@@ -232,9 +236,10 @@ model Category {
   parentId String? @map("parent_id") @db.Uuid
   isActive Boolean @default(true) @map("is_active")
 
-  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryTree")
-  products Product[]
+  parent      Category?    @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[]   @relation("CategoryTree")
+  products    Product[]
+  stockCounts StockCount[]
 
   @@unique([parentId, name])
   @@map("categories")
@@ -265,16 +270,19 @@ model Product {
   baseUnit Unit      @relation(fields: [baseUnitId], references: [id])
   taxRate  TaxRate?  @relation(fields: [taxRateId], references: [id])
 
-  units               ProductUnit[]
-  priceListItems      PriceListItem[]
-  stockMoves          StockMove[]
-  stockBalances       StockBalance[]
-  purchaseOrderLines  PurchaseOrderLine[]
-  goodsReceiptLines   GoodsReceiptLine[]
-  salesOrderLines     SalesOrderLine[]
-  deliveryLines       DeliveryLine[]
-  customerReturnLines CustomerReturnLine[]
-  invoiceLines        InvoiceLine[]
+  units                ProductUnit[]
+  priceListItems       PriceListItem[]
+  stockMoves           StockMove[]
+  stockBalances        StockBalance[]
+  purchaseOrderLines   PurchaseOrderLine[]
+  goodsReceiptLines    GoodsReceiptLine[]
+  salesOrderLines      SalesOrderLine[]
+  deliveryLines        DeliveryLine[]
+  customerReturnLines  CustomerReturnLine[]
+  invoiceLines         InvoiceLine[]
+  stockAdjustmentLines StockAdjustmentLine[]
+  stockTransferLines   StockTransferLine[]
+  stockCountLines      StockCountLine[]
 
   @@index([name])
   @@index([categoryId])
@@ -343,13 +351,17 @@ model Warehouse {
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
 
-  stockMoves      StockMove[]
-  stockBalances   StockBalance[]
-  purchaseOrders  PurchaseOrder[]
-  goodsReceipts   GoodsReceipt[]
-  salesOrders     SalesOrder[]
-  deliveries      Delivery[]
-  customerReturns CustomerReturn[]
+  stockMoves       StockMove[]
+  stockBalances    StockBalance[]
+  purchaseOrders   PurchaseOrder[]
+  goodsReceipts    GoodsReceipt[]
+  salesOrders      SalesOrder[]
+  deliveries       Delivery[]
+  customerReturns  CustomerReturn[]
+  stockAdjustments StockAdjustment[]
+  transfersOut     StockTransfer[]   @relation("TransferFrom")
+  transfersIn      StockTransfer[]   @relation("TransferTo")
+  stockCounts      StockCount[]
 
   @@map("warehouses")
 }
@@ -366,30 +378,42 @@ enum StockMoveType {
 
 /// The stock ledger. Append-only: never update or delete rows.
 model StockMove {
-  id           String        @id @default(uuid()) @db.Uuid
-  productId    String        @map("product_id") @db.Uuid
-  warehouseId  String        @map("warehouse_id") @db.Uuid
-  type         StockMoveType
+  id             String        @id @default(uuid()) @db.Uuid
+  productId      String        @map("product_id") @db.Uuid
+  warehouseId    String        @map("warehouse_id") @db.Uuid
+  type           StockMoveType
   /// Signed quantity in base unit: + in, - out
-  quantity     Decimal       @db.Decimal(18, 4)
+  quantity       Decimal       @db.Decimal(18, 4)
   /// Cost per base unit at the time of the move
-  unitCost     Decimal       @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  unitCost       Decimal       @default(0) @map("unit_cost") @db.Decimal(18, 4)
   /// Source document, e.g. ("GoodsReceipt", <id>) — for traceability
-  sourceType   String?       @map("source_type")
-  sourceId     String?       @map("source_id") @db.Uuid
+  sourceType     String?       @map("source_type")
+  sourceId       String?       @map("source_id") @db.Uuid
   /// Human-readable reference, e.g. "GR-2026-00012"
-  reference    String?
+  reference      String?
   /// Required for adjustments
-  reason       String?
+  reason         String?
   /// Groups the OUT and IN rows of one transfer
-  transferId   String?       @map("transfer_id") @db.Uuid
-  createdById  String        @map("created_by_id") @db.Uuid
-  createdAt    DateTime      @default(now()) @map("created_at")
+  transferId     String?       @map("transfer_id") @db.Uuid
+  /// Line of the source document — with sourceType/sourceId/type it makes
+  /// posting idempotent (the same line can never be posted twice)
+  sourceLineId   String?       @map("source_line_id") @db.Uuid
+  /// Set on a correction move: the move it cancels. A move is reversed at most once.
+  reversesMoveId String?       @unique @map("reverses_move_id") @db.Uuid
+  createdById    String        @map("created_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  /// Order in which moves were applied (assigned by the database under the product
+  /// lock). created_at comes from the API clock: two moves can share a millisecond.
+  seq            BigInt        @unique @default(autoincrement())
 
-  product   Product   @relation(fields: [productId], references: [id])
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
-  createdBy User      @relation(fields: [createdById], references: [id])
+  product      Product    @relation(fields: [productId], references: [id])
+  warehouse    Warehouse  @relation(fields: [warehouseId], references: [id])
+  createdBy    User       @relation(fields: [createdById], references: [id])
+  reversesMove StockMove? @relation("MoveReversal", fields: [reversesMoveId], references: [id])
+  reversedBy   StockMove? @relation("MoveReversal")
 
+  @@unique([sourceType, sourceId, sourceLineId, type])
+  @@index([productId, warehouseId, seq])
   @@index([productId, warehouseId, createdAt])
   @@index([sourceType, sourceId])
   @@index([transferId])
@@ -397,10 +421,13 @@ model StockMove {
 }
 
 /// Cached on-hand quantity per product and warehouse = SUM(stock_moves.quantity).
+/// Written only by StockEngine.
 model StockBalance {
   productId   String   @map("product_id") @db.Uuid
   warehouseId String   @map("warehouse_id") @db.Uuid
   quantity    Decimal  @default(0) @db.Decimal(18, 4)
+  /// Reserved by confirmed sales orders. Available = quantity - reserved.
+  reserved    Decimal  @default(0) @db.Decimal(18, 4)
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   product   Product   @relation(fields: [productId], references: [id])
@@ -408,6 +435,137 @@ model StockBalance {
 
   @@id([productId, warehouseId])
   @@map("stock_balances")
+}
+
+/// Lifecycle of inventory documents: stock moves only when POSTED.
+enum StockDocumentStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+/// Manual correction of stock in one warehouse (damage, loss, found goods...).
+model StockAdjustment {
+  id          String              @id @default(uuid()) @db.Uuid
+  /// e.g. "ADJ-2026-00001"
+  number      String              @unique
+  warehouseId String              @map("warehouse_id") @db.Uuid
+  status      StockDocumentStatus @default(DRAFT)
+  date        DateTime            @default(now())
+  reason      String
+  notes       String?
+  createdById String              @map("created_by_id") @db.Uuid
+  postedAt    DateTime?           @map("posted_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  warehouse Warehouse             @relation(fields: [warehouseId], references: [id])
+  createdBy User                  @relation(fields: [createdById], references: [id])
+  lines     StockAdjustmentLine[]
+
+  @@index([status, date])
+  @@map("stock_adjustments")
+}
+
+model StockAdjustmentLine {
+  id           String   @id @default(uuid()) @db.Uuid
+  adjustmentId String   @map("adjustment_id") @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
+  /// Signed quantity in base unit: + adds stock, - removes it
+  quantity     Decimal  @db.Decimal(18, 4)
+  /// Cost of added stock (base unit). null = current average cost. Ignored for removals.
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(18, 4)
+  notes        String?
+
+  adjustment StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product    Product         @relation(fields: [productId], references: [id])
+
+  @@index([adjustmentId])
+  @@map("stock_adjustment_lines")
+}
+
+/// Moves stock from one warehouse to another.
+model StockTransfer {
+  id              String              @id @default(uuid()) @db.Uuid
+  /// e.g. "TRF-2026-00001"
+  number          String              @unique
+  fromWarehouseId String              @map("from_warehouse_id") @db.Uuid
+  toWarehouseId   String              @map("to_warehouse_id") @db.Uuid
+  status          StockDocumentStatus @default(DRAFT)
+  date            DateTime            @default(now())
+  notes           String?
+  createdById     String              @map("created_by_id") @db.Uuid
+  postedAt        DateTime?           @map("posted_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  fromWarehouse Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  createdBy     User                @relation(fields: [createdById], references: [id])
+  lines         StockTransferLine[]
+
+  @@index([status, date])
+  @@map("stock_transfers")
+}
+
+model StockTransferLine {
+  id         String  @id @default(uuid()) @db.Uuid
+  transferId String  @map("transfer_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  /// Positive quantity in base unit
+  quantity   Decimal @db.Decimal(18, 4)
+
+  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id])
+
+  @@index([transferId])
+  @@map("stock_transfer_lines")
+}
+
+/// Physical inventory: staff count the goods, posting turns differences into adjustments.
+model StockCount {
+  id          String              @id @default(uuid()) @db.Uuid
+  /// e.g. "CNT-2026-00001"
+  number      String              @unique
+  warehouseId String              @map("warehouse_id") @db.Uuid
+  status      StockDocumentStatus @default(DRAFT)
+  date        DateTime            @default(now())
+  notes       String?
+  createdById String              @map("created_by_id") @db.Uuid
+  postedAt    DateTime?           @map("posted_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  /// The count was limited to this category and its sub-categories (null = whole warehouse)
+  categoryId String? @map("category_id") @db.Uuid
+
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  createdBy User             @relation(fields: [createdById], references: [id])
+  category  Category?        @relation(fields: [categoryId], references: [id])
+  lines     StockCountLine[]
+
+  @@index([status, date])
+  @@map("stock_counts")
+}
+
+model StockCountLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  countId     String   @map("count_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  /// On-hand quantity when the count started (base unit)
+  expectedQty Decimal  @map("expected_qty") @db.Decimal(18, 4)
+  /// What staff counted. null = not counted yet (line is skipped at posting)
+  countedQty  Decimal? @map("counted_qty") @db.Decimal(18, 4)
+  /// Set at posting: counted - on hand at that moment (the adjustment made)
+  difference  Decimal? @db.Decimal(18, 4)
+  /// Set at posting: cost per base unit of the adjustment (average cost then)
+  unitCost    Decimal? @map("unit_cost") @db.Decimal(18, 4)
+
+  count   StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  product Product    @relation(fields: [productId], references: [id])
+
+  @@unique([countId, productId])
+  @@map("stock_count_lines")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -585,29 +743,29 @@ enum SalesOrderStatus {
 }
 
 model SalesOrder {
-  id            String           @id @default(uuid()) @db.Uuid
+  id             String           @id @default(uuid()) @db.Uuid
   /// QUO-… while a quotation, SO-… once confirmed
-  number        String           @unique
-  quotationNo   String?          @unique @map("quotation_no")
-  customerId    String           @map("customer_id") @db.Uuid
+  number         String           @unique
+  quotationNo    String?          @unique @map("quotation_no")
+  customerId     String           @map("customer_id") @db.Uuid
   /// Warehouse the goods ship from
-  warehouseId   String           @map("warehouse_id") @db.Uuid
-  status        SalesOrderStatus @default(QUOTATION)
-  orderDate     DateTime         @default(now()) @map("order_date") @db.Date
-  validUntil    DateTime?        @map("valid_until") @db.Date
-  discountType  DiscountType?    @map("discount_type")
-  discountValue Decimal          @default(0) @map("discount_value") @db.Decimal(18, 4)
-  subtotal      Decimal          @default(0) @db.Decimal(18, 2)
-  discountTotal Decimal          @default(0) @map("discount_total") @db.Decimal(18, 2)
-  taxTotal      Decimal          @default(0) @map("tax_total") @db.Decimal(18, 2)
-  total         Decimal          @default(0) @db.Decimal(18, 2)
-  notes         String?
-  confirmedAt   DateTime?        @map("confirmed_at")
+  warehouseId    String           @map("warehouse_id") @db.Uuid
+  status         SalesOrderStatus @default(QUOTATION)
+  orderDate      DateTime         @default(now()) @map("order_date") @db.Date
+  validUntil     DateTime?        @map("valid_until") @db.Date
+  discountType   DiscountType?    @map("discount_type")
+  discountValue  Decimal          @default(0) @map("discount_value") @db.Decimal(18, 4)
+  subtotal       Decimal          @default(0) @db.Decimal(18, 2)
+  discountTotal  Decimal          @default(0) @map("discount_total") @db.Decimal(18, 2)
+  taxTotal       Decimal          @default(0) @map("tax_total") @db.Decimal(18, 2)
+  total          Decimal          @default(0) @db.Decimal(18, 2)
+  notes          String?
+  confirmedAt    DateTime?        @map("confirmed_at")
   /// Set when confirmed above the credit limit (needs sales.credit.override)
-  creditOverride Boolean         @default(false) @map("credit_override")
-  createdById   String           @map("created_by_id") @db.Uuid
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
+  creditOverride Boolean          @default(false) @map("credit_override")
+  createdById    String           @map("created_by_id") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
   customer  Customer  @relation(fields: [customerId], references: [id])
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
@@ -636,6 +794,9 @@ model SalesOrderLine {
   taxRate      Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   lineTotal    Decimal @default(0) @map("line_total") @db.Decimal(18, 2)
   deliveredQty Decimal @default(0) @map("delivered_qty") @db.Decimal(18, 4)
+  /// Base units reserved in the order warehouse for this line. Written only by
+  /// StockFlowsService (sum over open orders = stock_balances.reserved).
+  reservedQty  Decimal @default(0) @map("reserved_qty") @db.Decimal(18, 4)
 
   salesOrder    SalesOrder     @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
   product       Product        @relation(fields: [productId], references: [id])
@@ -672,9 +833,10 @@ model DeliveryLine {
   productId        String  @map("product_id") @db.Uuid
   quantity         Decimal @db.Decimal(18, 4)
 
-  delivery       Delivery       @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
-  salesOrderLine SalesOrderLine @relation(fields: [salesOrderLineId], references: [id])
-  product        Product        @relation(fields: [productId], references: [id])
+  delivery       Delivery             @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  salesOrderLine SalesOrderLine       @relation(fields: [salesOrderLineId], references: [id])
+  product        Product              @relation(fields: [productId], references: [id])
+  returnLines    CustomerReturnLine[]
 
   @@map("delivery_lines")
 }
@@ -701,16 +863,20 @@ model CustomerReturn {
 }
 
 model CustomerReturnLine {
-  id         String  @id @default(uuid()) @db.Uuid
-  returnId   String  @map("return_id") @db.Uuid
-  productId  String  @map("product_id") @db.Uuid
+  id             String  @id @default(uuid()) @db.Uuid
+  returnId       String  @map("return_id") @db.Uuid
+  productId      String  @map("product_id") @db.Uuid
   /// Base unit
-  quantity   Decimal @db.Decimal(18, 4)
-  unitPrice  Decimal @map("unit_price") @db.Decimal(18, 4)
+  quantity       Decimal @db.Decimal(18, 4)
+  unitPrice      Decimal @map("unit_price") @db.Decimal(18, 4)
+  /// Delivery line the goods came from: the return comes back at that cost
+  deliveryLineId String? @map("delivery_line_id") @db.Uuid
 
   customerReturn CustomerReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
   product        Product        @relation(fields: [productId], references: [id])
+  deliveryLine   DeliveryLine?  @relation(fields: [deliveryLineId], references: [id])
 
+  @@index([deliveryLineId])
   @@map("customer_return_lines")
 }
 
@@ -737,35 +903,35 @@ enum InvoiceStatus {
 /// One table for all four invoice types: customer side uses customer_id,
 /// supplier side uses supplier_id.
 model Invoice {
-  id               String        @id @default(uuid()) @db.Uuid
+  id                String        @id @default(uuid()) @db.Uuid
   /// Assigned when posted; drafts use a temporary "DRAFT-…" number
-  number           String        @unique
-  type             InvoiceType
-  status           InvoiceStatus @default(DRAFT)
-  customerId       String?       @map("customer_id") @db.Uuid
-  supplierId       String?       @map("supplier_id") @db.Uuid
+  number            String        @unique
+  type              InvoiceType
+  status            InvoiceStatus @default(DRAFT)
+  customerId        String?       @map("customer_id") @db.Uuid
+  supplierId        String?       @map("supplier_id") @db.Uuid
   /// Supplier's own bill number
-  supplierRef      String?       @map("supplier_ref")
-  salesOrderId     String?       @map("sales_order_id") @db.Uuid
-  purchaseOrderId  String?       @map("purchase_order_id") @db.Uuid
-  customerReturnId String?       @unique @map("customer_return_id") @db.Uuid
+  supplierRef       String?       @map("supplier_ref")
+  salesOrderId      String?       @map("sales_order_id") @db.Uuid
+  purchaseOrderId   String?       @map("purchase_order_id") @db.Uuid
+  customerReturnId  String?       @unique @map("customer_return_id") @db.Uuid
   /// For credit notes: the invoice being corrected
-  originalInvoiceId String?      @map("original_invoice_id") @db.Uuid
-  issueDate        DateTime      @default(now()) @map("issue_date") @db.Date
-  dueDate          DateTime?     @map("due_date") @db.Date
-  currency         String        @db.VarChar(3)
-  discountType     DiscountType? @map("discount_type")
-  discountValue    Decimal       @default(0) @map("discount_value") @db.Decimal(18, 4)
-  subtotal         Decimal       @default(0) @db.Decimal(18, 2)
-  discountTotal    Decimal       @default(0) @map("discount_total") @db.Decimal(18, 2)
-  taxTotal         Decimal       @default(0) @map("tax_total") @db.Decimal(18, 2)
-  total            Decimal       @default(0) @db.Decimal(18, 2)
-  amountPaid       Decimal       @default(0) @map("amount_paid") @db.Decimal(18, 2)
-  notes            String?
-  postedAt         DateTime?     @map("posted_at")
-  createdById      String        @map("created_by_id") @db.Uuid
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  originalInvoiceId String?       @map("original_invoice_id") @db.Uuid
+  issueDate         DateTime      @default(now()) @map("issue_date") @db.Date
+  dueDate           DateTime?     @map("due_date") @db.Date
+  currency          String        @db.VarChar(3)
+  discountType      DiscountType? @map("discount_type")
+  discountValue     Decimal       @default(0) @map("discount_value") @db.Decimal(18, 4)
+  subtotal          Decimal       @default(0) @db.Decimal(18, 2)
+  discountTotal     Decimal       @default(0) @map("discount_total") @db.Decimal(18, 2)
+  taxTotal          Decimal       @default(0) @map("tax_total") @db.Decimal(18, 2)
+  total             Decimal       @default(0) @db.Decimal(18, 2)
+  amountPaid        Decimal       @default(0) @map("amount_paid") @db.Decimal(18, 2)
+  notes             String?
+  postedAt          DateTime?     @map("posted_at")
+  createdById       String        @map("created_by_id") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
   customer        Customer?       @relation(fields: [customerId], references: [id])
   supplier        Supplier?       @relation(fields: [supplierId], references: [id])
@@ -787,21 +953,21 @@ model Invoice {
 }
 
 model InvoiceLine {
-  id          String   @id @default(uuid()) @db.Uuid
-  invoiceId   String   @map("invoice_id") @db.Uuid
-  lineNo      Int      @map("line_no")
+  id           String  @id @default(uuid()) @db.Uuid
+  invoiceId    String  @map("invoice_id") @db.Uuid
+  lineNo       Int     @map("line_no")
   /// Optional: a line can be a free-text service / fee
-  productId   String?  @map("product_id") @db.Uuid
-  description String
-  quantity    Decimal  @db.Decimal(18, 4)
-  unitPrice   Decimal  @map("unit_price") @db.Decimal(18, 4)
-  discountPct Decimal  @default(0) @map("discount_pct") @db.Decimal(5, 2)
-  taxRateId   String?  @map("tax_rate_id") @db.Uuid
+  productId    String? @map("product_id") @db.Uuid
+  description  String
+  quantity     Decimal @db.Decimal(18, 4)
+  unitPrice    Decimal @map("unit_price") @db.Decimal(18, 4)
+  discountPct  Decimal @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  taxRateId    String? @map("tax_rate_id") @db.Uuid
   /// Tax % copied at invoice time
-  taxRate     Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxRate      Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
   lineSubtotal Decimal @default(0) @map("line_subtotal") @db.Decimal(18, 2)
-  lineTax     Decimal  @default(0) @map("line_tax") @db.Decimal(18, 2)
-  lineTotal   Decimal  @default(0) @map("line_total") @db.Decimal(18, 2)
+  lineTax      Decimal @default(0) @map("line_tax") @db.Decimal(18, 2)
+  lineTotal    Decimal @default(0) @map("line_total") @db.Decimal(18, 2)
 
   invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product    Product? @relation(fields: [productId], references: [id])

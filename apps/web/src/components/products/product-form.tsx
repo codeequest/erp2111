@@ -7,6 +7,7 @@ import type { ProductDetail, ProductInput, ProductLookups } from '@erp/shared';
 import { api } from '@/lib/api';
 import { ErrorBox, btnPrimary, btnSecondary, inputClass } from './ui';
 
+import { tr } from '@/lib/i18n';
 interface Props {
   /** Omit to create a new product. */
   product?: ProductDetail;
@@ -48,7 +49,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
           setForm((f) => (f.baseUnitId ? f : { ...f, baseUnitId: l.units[0].id }));
         }
       })
-      .catch((e: Error) => setServerError(`Could not load form choices: ${e.message}`));
+      .catch((e: Error) => setServerError(tr('Could not load form choices: {error}', { error: e.message })));
   }, [product]);
 
   function set<K extends keyof FormState>(key: K, value: string) {
@@ -58,11 +59,11 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
 
   function validate(): boolean {
     const e: typeof errors = {};
-    if (!form.sku.trim()) e.sku = 'SKU is required';
-    if (!form.name.trim()) e.name = 'Name is required';
-    if (!form.baseUnitId) e.baseUnitId = 'Choose a unit';
-    if (!DECIMAL.test(form.salePrice.trim())) e.salePrice = 'Enter a price, e.g. 12.50';
-    if (!DECIMAL.test(form.minStock.trim())) e.minStock = 'Enter a quantity, e.g. 10';
+    if (!form.sku.trim()) e.sku = tr('SKU is required');
+    if (!form.name.trim()) e.name = tr('Name is required');
+    if (!form.baseUnitId) e.baseUnitId = tr('Choose a unit');
+    if (!DECIMAL.test(form.salePrice.trim())) e.salePrice = tr('Enter a price, e.g. 12.50');
+    if (!DECIMAL.test(form.minStock.trim())) e.minStock = tr('Enter a quantity, e.g. 10');
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -102,7 +103,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
     <form onSubmit={onSubmit} noValidate className="space-y-6">
       {serverError && <ErrorBox message={serverError} />}
 
-      <Section title="Identification">
+      <Section title={tr("Identification")}>
         <Field label="SKU" required error={errors.sku} htmlFor="sku">
           <input
             id="sku"
@@ -114,10 +115,10 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
           />
         </Field>
         <Field
-          label="Barcode"
+          label={tr("Barcode")}
           error={errors.barcode}
           htmlFor="barcode"
-          hint="Optional, must be unique"
+          hint={tr("Optional, must be unique")}
         >
           <input
             id="barcode"
@@ -127,7 +128,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
             maxLength={64}
           />
         </Field>
-        <Field label="Name" required error={errors.name} htmlFor="name" wide>
+        <Field label={tr("Name")} required error={errors.name} htmlFor="name" wide>
           <input
             id="name"
             value={form.name}
@@ -136,7 +137,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
             maxLength={200}
           />
         </Field>
-        <Field label="Description" htmlFor="description" wide>
+        <Field label={tr("Description")} htmlFor="description" wide>
           <textarea
             id="description"
             value={form.description}
@@ -148,15 +149,15 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
         </Field>
       </Section>
 
-      <Section title="Classification">
-        <Field label="Category" htmlFor="categoryId" hint={noneHint(lookups?.categories.length)}>
+      <Section title={tr("Classification")}>
+        <Field label={tr("Category")} htmlFor="categoryId" hint={noneHint(lookups?.categories.length)}>
           <select
             id="categoryId"
             value={form.categoryId}
             onChange={(e) => set('categoryId', e.target.value)}
             className={inputClass}
           >
-            <option value="">No category</option>
+            <option value="">{tr("No category")}</option>
             {lookups?.categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.path}
@@ -165,11 +166,11 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
           </select>
         </Field>
         <Field
-          label="Base unit"
+          label={tr("Base unit")}
           required
           error={errors.baseUnitId}
           htmlFor="baseUnitId"
-          hint="Stock is counted in this unit"
+          hint={tr("Stock is counted in this unit")}
         >
           <select
             id="baseUnitId"
@@ -177,7 +178,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
             onChange={(e) => set('baseUnitId', e.target.value)}
             className={inputClass}
           >
-            <option value="">Choose…</option>
+            <option value="">{tr("Choose…")}</option>
             {lookups?.units.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.code} — {u.name}
@@ -187,8 +188,8 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
         </Field>
       </Section>
 
-      <Section title="Pricing and stock">
-        <Field label="Sale price" required error={errors.salePrice} htmlFor="salePrice">
+      <Section title={tr("Pricing and stock")}>
+        <Field label={tr("Sale price")} required error={errors.salePrice} htmlFor="salePrice">
           <input
             id="salePrice"
             inputMode="decimal"
@@ -198,14 +199,14 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
             placeholder="0.00"
           />
         </Field>
-        <Field label="Tax rate" htmlFor="taxRateId" hint={noneHint(lookups?.taxRates.length)}>
+        <Field label={tr("Tax rate")} htmlFor="taxRateId" hint={noneHint(lookups?.taxRates.length)}>
           <select
             id="taxRateId"
             value={form.taxRateId}
             onChange={(e) => set('taxRateId', e.target.value)}
             className={inputClass}
           >
-            <option value="">Company default</option>
+            <option value="">{tr("Company default")}</option>
             {lookups?.taxRates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name} ({t.rate}%)
@@ -214,10 +215,10 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
           </select>
         </Field>
         <Field
-          label="Minimum stock"
+          label={tr("Minimum stock")}
           error={errors.minStock}
           htmlFor="minStock"
-          hint="Low-stock alert below this quantity (0 = off)"
+          hint={tr("Low-stock alert below this quantity (0 = off)")}
         >
           <input
             id="minStock"
@@ -231,11 +232,10 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
 
       <div className="flex justify-end gap-2">
         <Link href={cancelHref} className={btnSecondary}>
-          Cancel
-        </Link>
+          {tr("Cancel")}</Link>
         <button type="submit" disabled={saving || !lookups} className={btnPrimary}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {product ? 'Save changes' : 'Create product'}
+          {product ? tr("Save changes") : tr("Create product")}
         </button>
       </div>
     </form>
@@ -243,7 +243,7 @@ export function ProductForm({ product, onSaved, cancelHref }: Props) {
 }
 
 function noneHint(count: number | undefined) {
-  return count === 0 ? 'None defined yet' : undefined;
+  return count === 0 ? tr('None defined yet') : undefined;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

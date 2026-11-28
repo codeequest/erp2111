@@ -7,6 +7,7 @@ import { NAVIGATION } from '@erp/shared';
 import { useAuth } from '@/lib/auth';
 import { ITEM_ICONS, MODULE_COLORS } from './icons';
 
+import { tr } from '@/lib/i18n';
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { can } = useAuth();
@@ -30,7 +31,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               {module.key !== 'dashboard' && (
                 <p className="mb-1 flex items-center gap-2 px-2 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
                   <span className={clsx('size-1.5 rounded-full', color.bg)} />
-                  {module.label}
+                  {tr(module.label)}
                 </p>
               )}
               <ul className="space-y-0.5">
@@ -50,7 +51,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                         )}
                       >
                         {Icon && <Icon className={clsx('size-4', active && color.text)} />}
-                        {item.label}
+                        {tr(item.label)}
                       </Link>
                     </li>
                   );
@@ -62,8 +63,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <p className="border-t border-slate-800 px-5 py-3 text-xs text-slate-500">
-        v0.1.0 · skeleton
-      </p>
+        {tr("v0.1.0 · skeleton")}</p>
     </nav>
   );
 }

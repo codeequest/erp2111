@@ -16,6 +16,7 @@ import {
   inputClass,
 } from '@/components/products/ui';
 
+import { tr } from '@/lib/i18n';
 type Tab = 'categories' | 'units' | 'taxes';
 
 export default function CatalogueSetupPage() {
@@ -25,21 +26,20 @@ export default function CatalogueSetupPage() {
   const [tab, setTab] = useState<Tab>('categories');
 
   const tabs: { key: Tab; label: string; icon: typeof FolderTree; show: boolean }[] = [
-    { key: 'categories', label: 'Categories', icon: FolderTree, show: true },
-    { key: 'units', label: 'Units', icon: Ruler, show: true },
-    { key: 'taxes', label: 'Tax rates', icon: Percent, show: canTaxes },
+    { key: 'categories', label: tr("Categories"), icon: FolderTree, show: true },
+    { key: 'units', label: tr("Units"), icon: Ruler, show: true },
+    { key: 'taxes', label: tr("Tax rates"), icon: Percent, show: canTaxes },
   ];
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <Breadcrumbs
-          trail={[{ label: 'Products', href: '/inventory/products' }, { label: 'Catalogue setup' }]}
+          trail={[{ label: tr("Products"), href: '/inventory/products' }, { label: tr("Catalogue setup") }]}
         />
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Catalogue setup</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{tr("Catalogue setup")}</h1>
         <p className="text-sm text-slate-500">
-          Categories, units of measure and tax rates used by products
-        </p>
+          {tr("Categories, units of measure and tax rates used by products")}</p>
       </div>
 
       <div className="flex gap-1 border-b border-slate-200" role="tablist">
@@ -127,23 +127,23 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
           className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4"
         >
           <label className="min-w-[12rem] flex-1">
-            <span className="mb-1 block text-sm font-medium text-slate-700">New category</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700">{tr("New category")}</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputClass}
-              placeholder="e.g. Oils"
+              placeholder={tr("e.g. Oils")}
               maxLength={100}
             />
           </label>
           <label className="min-w-[12rem] flex-1">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Inside</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Inside")}</span>
             <select
               value={parentId}
               onChange={(e) => setParentId(e.target.value)}
               className={inputClass}
             >
-              <option value="">Top level</option>
+              <option value="">{tr("Top level")}</option>
               {rows
                 ?.filter((c) => c.isActive)
                 .map((c) => (
@@ -154,8 +154,7 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
             </select>
           </label>
           <button type="submit" disabled={busy || !name.trim()} className={btnPrimary}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Add
-          </button>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} {' '}{tr("Add")}</button>
         </form>
       )}
 
@@ -165,7 +164,7 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
         {!rows ? (
           <Loader2 className="mx-auto my-10 size-6 animate-spin text-slate-400" />
         ) : rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-500">No categories yet.</p>
+          <p className="px-4 py-10 text-center text-sm text-slate-500">{tr("No categories yet.")}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {rows.map((c) =>
@@ -183,11 +182,11 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
                     style={{ paddingLeft: `${c.depth * 1.5}rem` }}
                     className={clsx('flex-1', !c.isActive && 'text-slate-400')}
                   >
-                    {c.depth > 0 && <span className="mr-1.5 text-slate-300">└</span>}
+                    {c.depth > 0 && <span className="me-1.5 text-slate-300">└</span>}
                     <span className="font-medium">{c.name}</span>
                   </span>
                   <span className="text-xs text-slate-500">
-                    {c.productCount} product{c.productCount === 1 ? '' : 's'}
+                    {c.productCount} {' '}{tr("product")}{c.productCount === 1 ? '' : 's'}
                   </span>
                   <StatusBadge active={c.isActive} />
                   {canWrite && (
@@ -195,7 +194,7 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
                       <button
                         onClick={() => setEditing(c.id)}
                         className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
-                        aria-label={`Edit ${c.name}`}
+                        aria-label={tr('Edit {name}', { name: c.name })}
                       >
                         <Pencil className="size-4" />
                       </button>
@@ -203,7 +202,7 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
                         onClick={() => patch(c.id, { isActive: !c.isActive })}
                         className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
                       >
-                        {c.isActive ? 'Deactivate' : 'Activate'}
+                        {c.isActive ? tr("Deactivate") : tr("Activate")}
                       </button>
                     </span>
                   )}
@@ -214,9 +213,7 @@ function CategoriesTab({ canWrite }: { canWrite: boolean }) {
         )}
       </div>
       <p className="text-xs text-slate-500">
-        Inactive categories are hidden from the product form; their products keep them. Filtering
-        the product list by a category also shows the products of its sub-categories.
-      </p>
+        {tr("Inactive categories are hidden from the product form; their products keep them. Filtering the product list by a category also shows the products of its sub-categories.")}</p>
     </div>
   );
 }
@@ -244,16 +241,16 @@ function CategoryEditor({
         value={name}
         onChange={(e) => setName(e.target.value)}
         className={clsx(fieldClass, 'min-w-[10rem] flex-1 py-1.5')}
-        aria-label="Category name"
+        aria-label={tr("Category name")}
         autoFocus
       />
       <select
         value={parentId}
         onChange={(e) => setParentId(e.target.value)}
         className={clsx(fieldClass, 'py-1.5')}
-        aria-label="Parent category"
+        aria-label={tr("Parent category")}
       >
-        <option value="">Top level</option>
+        <option value="">{tr("Top level")}</option>
         {all
           .filter((c) => !blocked.has(c.id))
           .map((c) => (
@@ -265,14 +262,14 @@ function CategoryEditor({
       <button
         onClick={() => onSave({ name, parentId: parentId || null })}
         className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"
-        aria-label="Save"
+        aria-label={tr("Save")}
       >
         <Check className="size-4" />
       </button>
       <button
         onClick={onCancel}
         className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
-        aria-label="Cancel"
+        aria-label={tr("Cancel")}
       >
         <X className="size-4" />
       </button>
@@ -336,7 +333,7 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
           className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4"
         >
           <label className="w-32">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Code</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Code")}</span>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -346,12 +343,12 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
             />
           </label>
           <label className="min-w-[12rem] flex-1">
-            <span className="mb-1 block text-sm font-medium text-slate-700">Name</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Name")}</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputClass}
-              placeholder="Carton"
+              placeholder={tr("Carton")}
               maxLength={50}
             />
           </label>
@@ -360,9 +357,7 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
             disabled={busy || !code.trim() || !name.trim()}
             className={btnPrimary}
           >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Add
-            unit
-          </button>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} {' '}{tr("Add unit")}</button>
         </form>
       )}
 
@@ -370,11 +365,11 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase">
+          <thead className="bg-slate-50 text-start text-xs font-medium text-slate-500 uppercase">
             <tr>
-              <th className="px-4 py-2.5">Code</th>
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5 text-right">Used by</th>
+              <th className="px-4 py-2.5">{tr("Code")}</th>
+              <th className="px-4 py-2.5">{tr("Name")}</th>
+              <th className="px-4 py-2.5 text-end">{tr("Used by")}</th>
               {canWrite && <th className="w-24 px-4 py-2.5" />}
             </tr>
           </thead>
@@ -390,20 +385,20 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
                         onChange={(e) => setEditing({ id: u.id, name: e.target.value })}
                         onKeyDown={(e) => e.key === 'Enter' && rename()}
                         className={clsx(fieldClass, 'py-1')}
-                        aria-label="Unit name"
+                        aria-label={tr("Unit name")}
                         autoFocus
                       />
                       <button
                         onClick={rename}
                         className="rounded p-1 text-emerald-600 hover:bg-emerald-50"
-                        aria-label="Save"
+                        aria-label={tr("Save")}
                       >
                         <Check className="size-4" />
                       </button>
                       <button
                         onClick={() => setEditing(null)}
                         className="rounded p-1 text-slate-500 hover:bg-slate-100"
-                        aria-label="Cancel"
+                        aria-label={tr("Cancel")}
                       >
                         <X className="size-4" />
                       </button>
@@ -412,16 +407,16 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
                     u.name
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-right text-slate-500">
-                  {u.productCount} product{u.productCount === 1 ? '' : 's'}
+                <td className="px-4 py-2.5 text-end text-slate-500">
+                  {u.productCount} {' '}{tr("product")}{u.productCount === 1 ? '' : 's'}
                 </td>
                 {canWrite && (
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-end">
                     {editing?.id !== u.id && (
                       <button
                         onClick={() => setEditing({ id: u.id, name: u.name })}
                         className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
-                        aria-label={`Rename ${u.code}`}
+                        aria-label={tr('Rename {name}', { name: u.code })}
                       >
                         <Pencil className="size-4" />
                       </button>
@@ -435,8 +430,7 @@ function UnitsTab({ canWrite }: { canWrite: boolean }) {
         {!rows && <Loader2 className="mx-auto my-10 size-6 animate-spin text-slate-400" />}
       </div>
       <p className="text-xs text-slate-500">
-        Unit codes cannot be changed after creation, because they appear on documents.
-      </p>
+        {tr("Unit codes cannot be changed after creation, because they appear on documents.")}</p>
     </div>
   );
 }
@@ -493,17 +487,17 @@ function TaxRatesTab() {
         className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4"
       >
         <label className="min-w-[12rem] flex-1">
-          <span className="mb-1 block text-sm font-medium text-slate-700">Name</span>
+          <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Name")}</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
-            placeholder="VAT 19%"
+            placeholder={tr("VAT 19%")}
             maxLength={50}
           />
         </label>
         <label className="w-32">
-          <span className="mb-1 block text-sm font-medium text-slate-700">Rate (%)</span>
+          <span className="mb-1 block text-sm font-medium text-slate-700">{tr("Rate (%)")}</span>
           <input
             value={rate}
             onChange={(e) => setRate(e.target.value)}
@@ -517,20 +511,18 @@ function TaxRatesTab() {
           disabled={busy || !name.trim() || !rate.trim()}
           className={btnPrimary}
         >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Add
-          rate
-        </button>
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} {' '}{tr("Add rate")}</button>
       </form>
 
       {error && <ErrorBox message={error} />}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase">
+          <thead className="bg-slate-50 text-start text-xs font-medium text-slate-500 uppercase">
             <tr>
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5 text-right">Rate</th>
-              <th className="px-4 py-2.5">Status</th>
+              <th className="px-4 py-2.5">{tr("Name")}</th>
+              <th className="px-4 py-2.5 text-end">{tr("Rate")}</th>
+              <th className="px-4 py-2.5">{tr("Status")}</th>
               <th className="w-28 px-4 py-2.5" />
             </tr>
           </thead>
@@ -538,18 +530,18 @@ function TaxRatesTab() {
             {rows?.map((t) => (
               <tr key={t.id}>
                 <td className="px-4 py-2.5 font-medium">{t.name}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums">
+                <td className="px-4 py-2.5 text-end tabular-nums">
                   {Number(t.rate).toFixed(2)}%
                 </td>
                 <td className="px-4 py-2.5">
                   <StatusBadge active={t.isActive} />
                 </td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="px-4 py-2.5 text-end">
                   <button
                     onClick={() => toggle(t)}
                     className={clsx(btnSecondary, 'px-2 py-1 text-xs')}
                   >
-                    {t.isActive ? 'Deactivate' : 'Activate'}
+                    {t.isActive ? tr("Deactivate") : tr("Activate")}
                   </button>
                 </td>
               </tr>
@@ -557,14 +549,12 @@ function TaxRatesTab() {
           </tbody>
         </table>
         {rows?.length === 0 && (
-          <p className="px-4 py-10 text-center text-sm text-slate-500">No tax rates yet.</p>
+          <p className="px-4 py-10 text-center text-sm text-slate-500">{tr("No tax rates yet.")}</p>
         )}
         {!rows && <Loader2 className="mx-auto my-10 size-6 animate-spin text-slate-400" />}
       </div>
       <p className="text-xs text-slate-500">
-        Changing a rate affects only documents created afterwards. Tax rates are company settings,
-        so this tab needs the admin.settings.manage permission.
-      </p>
+        {tr("Changing a rate affects only documents created afterwards. Tax rates are company settings, so this tab needs the admin.settings.manage permission.")}</p>
     </div>
   );
 }

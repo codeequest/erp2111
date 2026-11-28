@@ -1,0 +1,447 @@
+=====================================================================
+  LE MOTEUR DE STOCK DE L'ERP — EXPLICATION SIMPLE DE CHAQUE FONCTION
+=====================================================================
+
+Ce document explique, avec des mots simples et des exemples, tout ce qui
+a été ajouté pour gérer le stock (étapes 1 à 6), plus les fichiers Excel
+et la langue arabe.
+
+Sommaire
+  1.  L'idée générale : le stock est un « cahier » de mouvements
+  2.  Le solde : en stock, réservé, disponible
+  3.  Le coût moyen (la valeur du stock)
+  4.  Les protections (ce que le système interdit)
+  5.  Corriger une erreur : l'annulation par un mouvement inverse
+  6.  Les entrepôts
+  7.  Le stock d'ouverture (le jour du démarrage)
+  8.  Les ajustements (casse, perte, marchandise trouvée)
+  9.  Les transferts (d'un entrepôt à un autre)
+  10. L'écran « Stock levels » : niveaux, mouvements, stock bas
+  11. Le contrôle de cohérence
+  12. L'inventaire physique (Stock counts)
+  13. La partie stock des Achats et des Ventes (préparée pour plus tard)
+  14. Qui a le droit de faire quoi (permissions)
+  15. Fichiers Excel et langue arabe
+  16. Une histoire complète, du début à la fin
+  17. Où se trouve le code (pour un développeur)
+
+
+---------------------------------------------------------------------
+1. L'IDÉE GÉNÉRALE : LE STOCK EST UN « CAHIER » DE MOUVEMENTS
+---------------------------------------------------------------------
+
+Imaginez un magasinier qui a un cahier. Chaque fois qu'une marchandise
+entre ou sort, il écrit une ligne :
+
+   28/11  Huile 1L   Entrepôt MAIN   +50   (réception fournisseur)
+   28/11  Huile 1L   Entrepôt MAIN    -3   (vente au client X)
+   29/11  Huile 1L   Entrepôt MAIN    -1   (bouteille cassée)
+
+Le stock actuel = la somme de toutes les lignes : 50 - 3 - 1 = 46.
+
+L'ERP fait exactement cela. Le « cahier » s'appelle le JOURNAL DES
+MOUVEMENTS (table stock_moves). Règles importantes :
+
+  - On ne fait qu'AJOUTER des lignes. Une ligne écrite ne peut JAMAIS
+    être modifiée ni effacée (même pas par un administrateur : la base
+    de données le refuse).
+  - Chaque ligne garde : la date, le produit, l'entrepôt, la quantité,
+    le coût, le document d'origine (ex. ADJ-2026-00001), la raison et
+    l'utilisateur.
+
+Pourquoi ? Parce qu'ainsi on peut toujours répondre à la question
+« pourquoi j'ai 46 bouteilles ? » : il suffit de lire le cahier.
+
+Types de mouvements :
+  OPENING          stock d'ouverture (démarrage)
+  RECEIPT          réception d'achat (entrée)
+  DELIVERY         livraison client (sortie)
+  ADJUSTMENT       ajustement / inventaire (entrée ou sortie)
+  TRANSFER_OUT     sortie d'un entrepôt vers un autre
+  TRANSFER_IN      entrée dans l'entrepôt qui reçoit
+  CUSTOMER_RETURN  retour d'un client (entrée)
+
+Un seul morceau de code a le droit d'écrire dans le stock : le
+« StockEngine » (le moteur). Tous les écrans passent par lui. Comme
+ça, les règles sont toujours les mêmes, partout.
+
+
+---------------------------------------------------------------------
+2. LE SOLDE : EN STOCK, RÉSERVÉ, DISPONIBLE
+---------------------------------------------------------------------
+
+Additionner tout le cahier à chaque fois serait lent. Le système garde
+donc, pour chaque produit et chaque entrepôt, un SOLDE déjà calculé
+(table stock_balances), mis à jour à chaque mouvement :
+
+  En stock (On hand)  : ce qui est physiquement sur l'étagère.
+  Réservé (Reserved)  : ce qui est promis à des commandes clients
+                        confirmées mais pas encore livrées.
+  Disponible          : En stock - Réservé = ce qu'on peut encore
+                        vendre à un nouveau client.
+
+Exemple :
+  En stock 46, une commande confirmée de 10 pas encore livrée
+  → Réservé 10, Disponible 36.
+  Un nouveau client ne peut donc commander que 36 au maximum.
+
+
+---------------------------------------------------------------------
+3. LE COÛT MOYEN (LA VALEUR DU STOCK)
+---------------------------------------------------------------------
+
+Chaque produit a un COÛT MOYEN PONDÉRÉ : le prix moyen payé pour les
+pièces qui sont en stock. Il change à chaque ENTRÉE avec un coût.
+
+Exemple :
+  - J'ai 10 pièces achetées 5 DT          → valeur 50 DT, coût moyen 5
+  - J'achète 10 pièces à 7 DT             → valeur 50 + 70 = 120 DT
+                                            pour 20 pièces
+                                          → nouveau coût moyen = 6
+  - Je vends 5 pièces                     → elles sortent au coût
+                                            moyen (6), le coût moyen
+                                            reste 6 ; il me reste
+                                            15 pièces = 90 DT.
+
+Règles :
+  - Les SORTIES (ventes, casse, transfert) partent toujours au coût
+    moyen : on ne choisit pas leur coût.
+  - Un transfert ne change pas la valeur : la marchandise part et
+    arrive au même coût moyen.
+  - Valeur du stock = quantité × coût moyen.
+  - Seuls les utilisateurs avec la permission inventory.cost.view
+    voient les coûts et les valeurs.
+
+
+---------------------------------------------------------------------
+4. LES PROTECTIONS (CE QUE LE SYSTÈME INTERDIT)
+---------------------------------------------------------------------
+
+a) Pas de stock négatif.
+   On ne peut pas sortir 5 pièces s'il n'y en a que 3. Le document est
+   refusé avec un message clair : « Not enough stock for … on hand 3,
+   requested 5 ».
+
+b) Deux personnes en même temps.
+   S'il reste 1 pièce et que deux vendeurs la livrent à la même
+   seconde, une seule livraison passe. Le système « verrouille » le
+   produit pendant l'écriture (comme une seule clé pour le cahier).
+
+c) Pas de double validation.
+   Un même document (ex. ADJ-2026-00004) ne peut pas modifier le stock
+   deux fois, même si on clique deux fois sur « Validate » ou si deux
+   personnes valident ensemble.
+
+d) Le journal est intouchable.
+   Personne ne peut modifier ni supprimer un mouvement.
+
+e) Règles sur les quantités et les coûts.
+   Quantité jamais à zéro, coût jamais négatif, 4 décimales maximum,
+   un transfert doit avoir deux entrepôts différents, un ajustement
+   doit avoir une raison.
+
+f) Un seul numéro par document, sans trou :
+   ADJ-2026-00001, TRF-2026-00001, CNT-2026-00001…
+
+
+---------------------------------------------------------------------
+5. CORRIGER UNE ERREUR : L'ANNULATION PAR UN MOUVEMENT INVERSE
+---------------------------------------------------------------------
+
+Comme on n'efface jamais une ligne, une erreur se corrige en ajoutant
+une ligne inverse (comme en comptabilité).
+
+Exemple : on a enregistré par erreur une réception de +20.
+  → l'annulation ajoute une ligne -20 qui « annule » la première.
+  Les deux lignes restent visibles dans l'historique, avec la raison.
+
+Pour un transfert, les deux côtés (sortie et entrée) sont annulés
+ensemble. Une ligne d'annulation ne peut pas être annulée à son tour :
+on crée alors un nouveau document.
+
+
+---------------------------------------------------------------------
+6. LES ENTREPÔTS
+---------------------------------------------------------------------
+
+Menu : Inventory → Warehouses
+
+Un entrepôt = un lieu où l'on garde la marchandise (dépôt, magasin,
+camion…). Chaque entrepôt a un code (ex. MAIN, SFAX), un nom et une
+adresse.
+
+  - Ajouter, modifier le nom ou l'adresse. Le code ne change jamais.
+  - Un entrepôt n'est JAMAIS supprimé (pour garder l'historique). On
+    peut le DÉSACTIVER, mais seulement si :
+      • il ne contient plus de stock,
+      • rien n'y est réservé pour des commandes,
+      • ce n'est pas le dernier entrepôt actif.
+  - La colonne « Products in stock » indique combien de produits y
+    sont présents.
+
+
+---------------------------------------------------------------------
+7. LE STOCK D'OUVERTURE (LE JOUR DU DÉMARRAGE)
+---------------------------------------------------------------------
+
+Menu : Inventory → Warehouses → Import opening stock
+
+Quand on commence à utiliser l'ERP, il y a déjà de la marchandise sur
+les étagères. On la saisit UNE SEULE FOIS par un fichier Excel :
+
+   sku       warehouse  quantity  unit_cost
+   ART-001   MAIN       50        12.5
+   ART-002   MAIN       10        3
+
+  1. Télécharger le modèle (Download template), le remplir.
+  2. Choisir le fichier : le système VÉRIFIE sans rien enregistrer et
+     montre chaque ligne (prête, ou l'erreur : produit inconnu,
+     quantité invalide…).
+  3. Corriger si besoin, puis cliquer sur Import.
+
+Un produit qui a déjà des mouvements dans un entrepôt est refusé pour
+cet entrepôt : après le démarrage, on corrige avec un ajustement.
+
+
+---------------------------------------------------------------------
+8. LES AJUSTEMENTS (CASSE, PERTE, MARCHANDISE TROUVÉE)
+---------------------------------------------------------------------
+
+Menu : Inventory → Adjustments
+
+Pour corriger le stock d'un entrepôt quand la réalité est différente :
+bouteille cassée, produit volé, carton retrouvé…
+
+  1. New adjustment → choisir l'entrepôt, écrire la RAISON (obligatoire).
+  2. Ajouter les produits (taper le nom, le SKU ou scanner le
+     code-barres). Pour chaque ligne : « Remove − » ou « Add + » et la
+     quantité. L'écran montre le stock actuel et le stock APRÈS.
+  3. Save draft (brouillon) : le stock NE BOUGE PAS encore.
+  4. Validate : le stock bouge. Le document est figé.
+
+Un brouillon peut être annulé (Cancel draft). Un document validé ne
+s'annule pas : on fait un nouvel ajustement dans l'autre sens.
+
+Pour un « Add + », on peut donner un coût (sinon le coût moyen est
+utilisé), si on a la permission de voir les coûts.
+
+
+---------------------------------------------------------------------
+9. LES TRANSFERTS (D'UN ENTREPÔT À UN AUTRE)
+---------------------------------------------------------------------
+
+Menu : Inventory → Transfers
+
+Pour déplacer de la marchandise, par exemple du dépôt MAIN vers le
+magasin SFAX.
+
+  1. New transfer → choisir « From » (départ) et « To » (arrivée).
+  2. Ajouter les produits et la quantité à déplacer. L'écran montre ce
+     qui est disponible au départ (en rouge si c'est trop).
+  3. Save draft, puis Validate.
+
+À la validation, le système écrit deux lignes : -10 dans MAIN et +10
+dans SFAX, au même coût moyen. Le stock total de l'entreprise ne
+change pas, seulement son emplacement.
+
+
+---------------------------------------------------------------------
+10. L'ÉCRAN « STOCK LEVELS » : NIVEAUX, MOUVEMENTS, STOCK BAS
+---------------------------------------------------------------------
+
+Menu : Inventory → Stock levels
+
+Onglet « Stock levels » :
+  - Une ligne par produit : en stock, réservé, disponible, stock
+    minimum, et (avec la permission) coût moyen et valeur.
+  - En haut : nombre de produits, nombre en STOCK BAS, valeur totale.
+  - Filtres : recherche (nom, SKU, code-barres), entrepôt, catégorie,
+    « seulement en stock », « stock bas seulement ».
+  - Bouton Export Excel (avec les mêmes filtres).
+  - Le bouton horloge d'une ligne ouvre l'historique du produit.
+
+STOCK BAS : un produit actif dont le stock total (tous entrepôts) est
+inférieur à son « stock minimum » (réglé dans la fiche produit ;
+0 = pas d'alerte). Le tableau de bord affiche aussi ce nombre.
+
+Onglet « Movements » : le cahier complet (point 1), du plus récent au
+plus ancien, avec la quantité (+ vert / − rouge), le « stock après »
+chaque mouvement, le document, la raison et l'utilisateur. Filtres par
+produit, entrepôt, type, dates, numéro de document.
+
+
+---------------------------------------------------------------------
+11. LE CONTRÔLE DE COHÉRENCE
+---------------------------------------------------------------------
+
+À l'ouverture de l'écran Stock levels, le système vérifie tout seul :
+  - que chaque solde = la somme de ses mouvements dans le cahier ;
+  - que le « réservé » = ce que les commandes ouvertes attendent.
+
+Si quelque chose ne correspond pas, un message rouge apparaît. Cela ne
+doit jamais arriver ; si c'est le cas, quelqu'un a modifié la base de
+données en dehors de l'ERP : il faut prévenir l'administrateur.
+
+
+---------------------------------------------------------------------
+12. L'INVENTAIRE PHYSIQUE (STOCK COUNTS)
+---------------------------------------------------------------------
+
+Menu : Inventory → Stock counts
+(Guide détaillé : docs/fr/guide-inventaire-physique.md)
+
+But : compter ce qui est vraiment sur les étagères et mettre le stock
+de l'ERP à jour.
+
+  1. Démarrer : choisir l'entrepôt, et si on veut une seule catégorie
+     (pour un grand dépôt, on compte une partie à la fois). Le système
+     liste les produits avec la quantité ATTENDUE.
+  2. Compter :
+       - scanner le code-barres → taper la quantité → Entrée → produit
+         suivant ; un produit scanné qui n'est pas dans la liste est
+         ajouté ;
+       - ou taper dans la colonne « Counted » ;
+       - ou télécharger la feuille de comptage Excel, la remplir, puis
+         l'importer.
+     On enregistre autant de fois qu'on veut, à plusieurs.
+     « Blind count » cache la quantité attendue pour que le magasinier
+     compte vraiment au lieu de recopier.
+  3. Valider : chaque produit COMPTÉ prend la quantité comptée. Les
+     produits NON comptés ne changent pas. Les écarts deviennent des
+     ajustements (raison « Stock count CNT-… »).
+
+Point malin : l'écart est calculé avec le stock AU MOMENT DE LA
+VALIDATION. Exemple : attendu 20, on compte 18, mais pendant le
+comptage on a vendu 2 → le stock était déjà 18 → aucun ajustement,
+la vente n'est pas perdue. Le filtre « Stock moved » montre les
+produits qui ont bougé pendant le comptage (à recompter si besoin).
+
+
+---------------------------------------------------------------------
+13. LA PARTIE STOCK DES ACHATS ET DES VENTES (PRÉPARÉE POUR PLUS TARD)
+---------------------------------------------------------------------
+
+Les modules Achats et Ventes n'ont pas encore d'écrans. Mais leur
+partie « stock » est déjà prête et testée (rien de visible à l'écran
+pour l'instant). Quand on les développera, ils n'auront qu'à appeler
+ces fonctions :
+
+  RÉCEPTION D'ACHAT (receive)
+    La marchandise reçue du fournisseur entre en stock au prix
+    d'achat NET (après remise), converti en unité de base.
+    Exemple : 2 cartons de 12 à 120 DT le carton, remise 10 %
+      → +24 pièces à 120 × 0,90 / 12 = 9 DT la pièce.
+    Le coût moyen est mis à jour.
+
+  ANNULER UNE RÉCEPTION (cancelReceipt)
+    Ressort les mêmes quantités (refusé si la marchandise est déjà
+    vendue et qu'il n'en reste plus assez).
+
+  COMMANDE CLIENT CONFIRMÉE (reserveOrder)
+    RÉSERVE la quantité à livrer (voir point 2). Si le disponible
+    manque : refus, ou réservation PARTIELLE de ce qui est disponible
+    avec l'indication de ce qui manque (reliquat).
+
+  COMMANDE ANNULÉE OU TERMINÉE (releaseOrder)
+    Libère sa réservation.
+
+  LIVRAISON (deliver)
+    Sortie au coût moyen (c'est le « coût des ventes »), et libère la
+    réservation correspondante. Interdit :
+      - de prendre le stock réservé pour un AUTRE client ;
+      - de livrer plus que la quantité commandée ;
+      - de passer deux fois la même livraison.
+
+  ANNULER UNE LIVRAISON (cancelDelivery)
+    La marchandise revient en stock au même coût, et est de nouveau
+    réservée pour la commande.
+
+  RETOUR CLIENT (customerReturn)
+    La marchandise revient au coût de la livraison d'ORIGINE (pas au
+    coût moyen du jour). On ne peut pas retourner plus que ce qui a
+    été livré moins les retours déjà faits.
+
+Sécurité : les quantités livrées et retournées sont relues dans le
+cahier des mouvements, pas dans les documents de vente. Même si un
+compteur d'un document était faux, le stock reste juste.
+
+
+---------------------------------------------------------------------
+14. QUI A LE DROIT DE FAIRE QUOI (PERMISSIONS)
+---------------------------------------------------------------------
+
+  inventory.stock.read      voir le stock, les mouvements, les
+                            entrepôts, les documents
+  inventory.stock.adjust    ajustements, stock d'ouverture, inventaires
+  inventory.stock.transfer  transferts
+  inventory.cost.view       voir et saisir les coûts et les valeurs
+
+L'administrateur (admin@erp.local) a toutes les permissions.
+
+
+---------------------------------------------------------------------
+15. FICHIERS EXCEL ET LANGUE ARABE
+---------------------------------------------------------------------
+
+Excel :
+  - Tous les téléchargements sont de vrais fichiers Excel (.xlsx) :
+    liste des produits, niveaux de stock, feuille de comptage,
+    modèles d'import.
+  - Tous les imports acceptent .xlsx (les anciens CSV marchent encore).
+  - Les fichiers .xls très anciens (Excel 97-2003) sont refusés :
+    enregistrer en .xlsx.
+
+Arabe :
+  - Bouton العربية en haut de l'écran et sur la page de connexion :
+    toute l'application passe en arabe, de droite à gauche.
+  - Les messages d'erreur du serveur sont aussi en arabe, y compris
+    les erreurs ligne par ligne des imports Excel.
+  - Bouton English pour revenir à l'anglais.
+
+
+---------------------------------------------------------------------
+16. UNE HISTOIRE COMPLÈTE, DU DÉBUT À LA FIN
+---------------------------------------------------------------------
+
+Produit : « Sucre 1kg ». Entrepôts : MAIN (dépôt) et SFAX (magasin).
+
+ 1. Démarrage : import du stock d'ouverture : 100 sacs à MAIN, coût
+    2 DT.                         MAIN = 100   coût moyen 2
+ 2. Transfert de 30 sacs MAIN → SFAX.
+                                  MAIN = 70    SFAX = 30
+ 3. 2 sacs déchirés à SFAX : ajustement « Remove − 2 », raison
+    « Sacs déchirés ».            SFAX = 28
+ 4. (Plus tard, module Achats) réception de 100 sacs à 2,60 DT à MAIN.
+                                  MAIN = 170
+    Coût moyen : (98 × 2 + 100 × 2,60) / 198 = 2,30 DT environ.
+ 5. (Plus tard, module Ventes) commande d'un client de 50 sacs depuis
+    MAIN, confirmée : réservé 50, disponible 120.
+ 6. Livraison des 50 sacs : MAIN = 120, réservé 0.
+ 7. Le client rend 5 sacs : retour au coût de la livraison.
+                                  MAIN = 125
+ 8. Fin du mois : inventaire de MAIN. On compte 123.
+    Validation → ajustement −2 automatique. MAIN = 123.
+
+À chaque étape, l'onglet Movements montre la ligne, le document, la
+raison et l'utilisateur, et le contrôle de cohérence reste vert.
+
+
+---------------------------------------------------------------------
+17. OÙ SE TROUVE LE CODE (POUR UN DÉVELOPPEUR)
+---------------------------------------------------------------------
+
+Dossier : apps/api/src/modules/inventory/stock/
+
+  stock-rules.ts            règles pures : coût moyen, contrôle des lignes
+  stock-engine.service.ts   le moteur : post, transfer, reverse,
+                            reserve, release, contrôle de cohérence
+  opening-balance.service.ts   stock d'ouverture (import Excel)
+  adjustments.service.ts       ajustements
+  transfers.service.ts         transferts
+  stock-counts.service.ts      inventaires physiques
+  stock-reports.service.ts     niveaux, mouvements, stock bas, cohérence
+  stock-flows.service.ts       partie stock des achats et des ventes
+  stock-documents.common.ts    fonctions communes aux documents
+
+Les fichiers *.spec.ts sont les tests automatiques (124 tests, tous
+réussis). Plan détaillé de développement : docs/fr/plan-moteur-de-stock.md

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
 
+import { tr } from '@/lib/i18n';
 /**
  * Draws a barcode as SVG. 13-digit codes with a valid check digit are drawn
  * as EAN-13 (what shop scanners expect); anything else as Code 128.
@@ -29,5 +30,5 @@ export function Barcode({ value, height = 40 }: { value: string; height?: number
     if (!ok) JsBarcode(ref.current, value, { ...common, format: 'CODE128' });
   }, [value, height]);
 
-  return <svg ref={ref} className="max-w-full" role="img" aria-label={`Barcode ${value}`} />;
+  return <svg ref={ref} className="max-w-full" role="img" aria-label={tr('Barcode {value}', { value })} />;
 }

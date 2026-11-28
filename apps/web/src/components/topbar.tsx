@@ -3,7 +3,9 @@
 import { Bell, LogOut, Menu, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { LanguageSwitch } from '@/components/language-switch';
 
+import { tr } from '@/lib/i18n';
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -19,29 +21,30 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       <button
         onClick={onMenu}
         className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
-        aria-label="Open menu"
+        aria-label={tr("Open menu")}
       >
         <Menu className="size-5" />
       </button>
 
       <div className="relative hidden max-w-md flex-1 sm:block">
-        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+        <Search className="absolute top-1/2 start-3 size-4 -translate-y-1/2 text-slate-400" />
         <input
           disabled
-          placeholder="Search products, customers, documents… (coming soon)"
-          className="w-full rounded-md border border-slate-200 bg-slate-50 py-2 pr-3 pl-9 text-sm placeholder:text-slate-400"
+          placeholder={tr("Search products, customers, documents… (coming soon)")}
+          className="w-full rounded-md border border-slate-200 bg-slate-50 py-2 pe-3 ps-9 text-sm placeholder:text-slate-400"
         />
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ms-auto flex items-center gap-2">
+        <LanguageSwitch />
         <button
           className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-          aria-label="Notifications"
-          title="Notifications (coming soon)"
+          aria-label={tr("Notifications")}
+          title={tr("Notifications (coming soon)")}
         >
           <Bell className="size-5" />
         </button>
-        <div className="hidden text-right sm:block">
+        <div className="hidden text-end sm:block">
           <p className="text-sm leading-tight font-medium text-slate-900">{user?.fullName}</p>
           <p className="text-xs leading-tight text-slate-500">{user?.roles.join(', ')}</p>
         </div>
@@ -54,8 +57,8 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             router.replace('/login');
           }}
           className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-red-600"
-          aria-label="Log out"
-          title="Log out"
+          aria-label={tr("Log out")}
+          title={tr("Log out")}
         >
           <LogOut className="size-5" />
         </button>

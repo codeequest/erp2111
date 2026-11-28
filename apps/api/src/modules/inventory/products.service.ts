@@ -164,7 +164,7 @@ export class ProductsService {
       const moves = await this.prisma.stockMove.findMany({
         where: { productId: id },
         include: { warehouse: { select: { id: true, code: true } } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { seq: 'desc' },
         take: RECENT_MOVES,
       });
       detail.recentMoves = moves.map((m) => {

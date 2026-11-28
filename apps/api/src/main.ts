@@ -1,9 +1,10 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { I18nExceptionFilter, I18nResponseInterceptor } from './common/i18n/i18n.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +19,9 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
+  // Messages in Arabic when the user chose Arabic (X-Lang header or erp_lang cookie).
+  app.useGlobalFilters(new I18nExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
+  app.useGlobalInterceptors(new I18nResponseInterceptor());
 
   const swagger = new DocumentBuilder()
     .setTitle('ERP API')

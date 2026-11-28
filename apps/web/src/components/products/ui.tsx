@@ -4,19 +4,19 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import { ChevronRight } from 'lucide-react';
 
+import { tr } from '@/lib/i18n';
 /** Small building blocks shared by the product screens. */
 
 export function Breadcrumbs({ trail }: { trail: { label: string; href?: string }[] }) {
   return (
     <nav className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
       <Link href="/dashboard" className="hover:text-slate-700">
-        Home
-      </Link>
-      <ChevronRight className="size-3" />
-      <span className="text-mod-inventory">Inventory</span>
+        {tr("Home")}</Link>
+      <ChevronRight className="rtl:-scale-x-100 size-3" />
+      <span className="text-mod-inventory">{tr("Inventory")}</span>
       {trail.map((t) => (
         <span key={t.label} className="flex items-center gap-1">
-          <ChevronRight className="size-3" />
+          <ChevronRight className="rtl:-scale-x-100 size-3" />
           {t.href ? (
             <Link href={t.href} className="hover:text-slate-700">
               {t.label}
@@ -39,7 +39,7 @@ export function StatusBadge({ active }: { active: boolean }) {
       )}
     >
       <span className={clsx('size-1.5 rounded-full', active ? 'bg-emerald-500' : 'bg-slate-400')} />
-      {active ? 'Active' : 'Inactive'}
+      {active ? tr("Active") : tr("Inactive")}
     </span>
   );
 }

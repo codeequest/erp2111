@@ -21,6 +21,7 @@ import { ProductImageCard } from '@/components/products/product-image-card';
 import { ProductHistoryCard } from '@/components/products/product-history-card';
 import { ProductPricesCard } from '@/components/products/product-prices-card';
 
+import { tr } from '@/lib/i18n';
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
@@ -57,7 +58,7 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <div className="mx-auto max-w-5xl space-y-6">
-        <Breadcrumbs trail={[{ label: 'Products', href: '/inventory/products' }]} />
+        <Breadcrumbs trail={[{ label: tr("Products"), href: '/inventory/products' }]} />
         {error ? (
           <ErrorBox message={error} />
         ) : (
@@ -74,7 +75,7 @@ export default function ProductDetailPage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <Breadcrumbs
-          trail={[{ label: 'Products', href: '/inventory/products' }, { label: product.name }]}
+          trail={[{ label: tr("Products"), href: '/inventory/products' }, { label: product.name }]}
         />
         <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -84,7 +85,7 @@ export default function ProductDetailPage() {
             </div>
             <p className="mt-1 font-mono text-sm text-slate-500">
               {product.sku}
-              {product.barcode && <span className="ml-3">· {product.barcode}</span>}
+              {product.barcode && <span className="ms-3">· {product.barcode}</span>}
             </p>
           </div>
           {canWrite && (
@@ -92,38 +93,34 @@ export default function ProductDetailPage() {
               {confirming ? (
                 <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
                   {product.isActive
-                    ? 'Hide this product from new orders?'
-                    : 'Make this product available again?'}
+                    ? tr("Hide this product from new orders?")
+                    : tr("Make this product available again?")}
                   <button
                     onClick={toggleActive}
                     disabled={busy}
                     className="rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
                   >
-                    {busy ? 'Saving…' : 'Yes'}
+                    {busy ? tr("Saving…") : tr("Yes")}
                   </button>
                   <button
                     onClick={() => setConfirming(false)}
                     className="rounded px-2 py-1 text-xs hover:bg-amber-100"
                   >
-                    No
-                  </button>
+                    {tr("No")}</button>
                 </div>
               ) : (
                 <button onClick={() => setConfirming(true)} className={btnSecondary}>
                   {product.isActive ? (
                     <>
-                      <PowerOff className="size-4" /> Deactivate
-                    </>
+                      <PowerOff className="size-4" /> {' '}{tr("Deactivate")}</>
                   ) : (
                     <>
-                      <Power className="size-4" /> Activate
-                    </>
+                      <Power className="size-4" /> {' '}{tr("Activate")}</>
                   )}
                 </button>
               )}
               <Link href={`/inventory/products/${id}/edit`} className={btnPrimary}>
-                <Pencil className="size-4" /> Edit
-              </Link>
+                <Pencil className="size-4" /> {' '}{tr("Edit")}</Link>
             </div>
           )}
         </div>
@@ -133,24 +130,22 @@ export default function ProductDetailPage() {
 
       {!product.isActive && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          This product is inactive: it is hidden from new sales and purchase orders but kept in
-          history.
-        </div>
+          {tr("This product is inactive: it is hidden from new sales and purchase orders but kept in history.")}</div>
       )}
 
       {/* Key figures */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Sale price" value={formatMoney(product.salePrice)} />
+        <Stat label={tr("Sale price")} value={formatMoney(product.salePrice)} />
         {product.averageCost !== undefined && (
-          <Stat label="Average cost" value={formatMoney(product.averageCost)} />
+          <Stat label={tr("Average cost")} value={formatMoney(product.averageCost)} />
         )}
         <Stat
-          label="On hand"
+          label={tr("On hand")}
           value={`${formatQty(product.stockOnHand)} ${product.baseUnit.code}`}
-          warn={low ? `Below minimum (${formatQty(product.minStock)})` : undefined}
+          warn={low ? tr('Below minimum ({qty})', { qty: formatQty(product.minStock) }) : undefined}
         />
         <Stat
-          label="Minimum stock"
+          label={tr("Minimum stock")}
           value={Number(product.minStock) > 0 ? formatQty(product.minStock) : 'Off'}
         />
       </div>
@@ -160,24 +155,24 @@ export default function ProductDetailPage() {
           <ProductImageCard product={product} canWrite={canWrite} onSaved={setProduct} />
 
           {/* Details */}
-          <Card title="Details">
+          <Card title={tr("Details")}>
             <dl className="space-y-3 text-sm">
-              <Row label="Category" value={product.category?.name} />
+              <Row label={tr("Category")} value={product.category?.name} />
               <Row
-                label="Base unit"
+                label={tr("Base unit")}
                 value={`${product.baseUnit.code} — ${product.baseUnit.name}`}
               />
               <Row
-                label="Tax rate"
+                label={tr("Tax rate")}
                 value={
                   product.taxRate
                     ? `${product.taxRate.name} (${product.taxRate.rate}%)`
                     : 'Company default'
                 }
               />
-              <Row label="Description" value={product.description} />
-              <Row label="Created" value={formatDateTime(product.createdAt)} />
-              <Row label="Last updated" value={formatDateTime(product.updatedAt)} />
+              <Row label={tr("Description")} value={product.description} />
+              <Row label={tr("Created")} value={formatDateTime(product.createdAt)} />
+              <Row label={tr("Last updated")} value={formatDateTime(product.updatedAt)} />
             </dl>
           </Card>
         </div>
@@ -190,11 +185,10 @@ export default function ProductDetailPage() {
           />
 
           {/* Stock by warehouse */}
-          <Card title="Stock by warehouse">
+          <Card title={tr("Stock by warehouse")}>
             {product.stockByWarehouse.length === 0 ? (
               <p className="text-sm text-slate-500">
-                No stock yet. Stock arrives through goods receipts and adjustments.
-              </p>
+                {tr("No stock yet. Stock arrives through goods receipts and adjustments.")}</p>
             ) : (
               <table className="w-full text-sm">
                 <tbody className="divide-y divide-slate-100">
@@ -204,7 +198,7 @@ export default function ProductDetailPage() {
                         <span className="font-mono text-xs text-slate-500">{s.warehouse.code}</span>{' '}
                         {s.warehouse.name}
                       </td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="py-2 text-end tabular-nums">
                         {formatQty(s.quantity)} {product.baseUnit.code}
                       </td>
                     </tr>
@@ -216,38 +210,38 @@ export default function ProductDetailPage() {
 
           {/* Recent movements */}
           {product.recentMoves && (
-            <Card title="Recent stock movements">
+            <Card title={tr("Recent stock movements")}>
               {product.recentMoves.length === 0 ? (
-                <p className="text-sm text-slate-500">No movements yet.</p>
+                <p className="text-sm text-slate-500">{tr("No movements yet.")}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="text-left text-xs text-slate-500 uppercase">
+                    <thead className="text-start text-xs text-slate-500 uppercase">
                       <tr>
-                        <th className="py-2 pr-3 font-medium">Date</th>
-                        <th className="py-2 pr-3 font-medium">Type</th>
-                        <th className="py-2 pr-3 font-medium">Warehouse</th>
-                        <th className="py-2 pr-3 font-medium">Reference</th>
-                        <th className="py-2 text-right font-medium">Qty</th>
+                        <th className="py-2 pe-3 font-medium">{tr("Date")}</th>
+                        <th className="py-2 pe-3 font-medium">{tr("Type")}</th>
+                        <th className="py-2 pe-3 font-medium">{tr("Warehouse")}</th>
+                        <th className="py-2 pe-3 font-medium">{tr("Reference")}</th>
+                        <th className="py-2 text-end font-medium">{tr("Qty")}</th>
                         {product.averageCost !== undefined && (
-                          <th className="py-2 pl-3 text-right font-medium">Unit cost</th>
+                          <th className="py-2 ps-3 text-end font-medium">{tr("Unit cost")}</th>
                         )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {product.recentMoves.map((m) => (
                         <tr key={m.id}>
-                          <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
+                          <td className="py-2 pe-3 whitespace-nowrap text-slate-600">
                             {formatDateTime(m.createdAt)}
                           </td>
-                          <td className="py-2 pr-3">{m.type.replaceAll('_', ' ').toLowerCase()}</td>
-                          <td className="py-2 pr-3 font-mono text-xs">{m.warehouse.code}</td>
-                          <td className="py-2 pr-3 text-slate-600">
+                          <td className="py-2 pe-3">{m.type.replaceAll('_', ' ').toLowerCase()}</td>
+                          <td className="py-2 pe-3 font-mono text-xs">{m.warehouse.code}</td>
+                          <td className="py-2 pe-3 text-slate-600">
                             {m.reference ?? m.reason ?? '—'}
                           </td>
                           <td
                             className={clsx(
-                              'py-2 text-right tabular-nums',
+                              'py-2 text-end tabular-nums',
                               Number(m.quantity) < 0 ? 'text-red-600' : 'text-emerald-700',
                             )}
                           >
@@ -255,7 +249,7 @@ export default function ProductDetailPage() {
                             {formatQty(m.quantity)}
                           </td>
                           {product.averageCost !== undefined && (
-                            <td className="py-2 pl-3 text-right tabular-nums">
+                            <td className="py-2 ps-3 text-end tabular-nums">
                               {formatMoney(m.unitCost)}
                             </td>
                           )}

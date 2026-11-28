@@ -20,6 +20,8 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nes
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { RequestUser } from '../../common/types/request-user';
+import { readTable, toXlsx, xlsxFile } from '../../common/spreadsheet';
+import { PRODUCT_CSV_COLUMNS } from '@erp/shared';
 import { SetPackUnitsDto } from './dto/catalog.dto';
 import { CreateProductDto, ListProductsQueryDto, UpdateProductDto } from './dto/product.dto';
 import { ProductsService } from './products.service';
@@ -63,13 +65,25 @@ export class ProductsController {
     return this.productsService.lookups();
   }
 
+  @Get('import-template')
+  @RequirePermissions('inventory.product.read')
+  @ApiOperation({ summary: 'Download an empty Excel file with the product import columns' })
+  async importTemplate() {
+    const columns = PRODUCT_CSV_COLUMNS.map((h) => ({
+      header: h,
+      numeric: h === 'sale_price' || h === 'min_stock',
+      width: h === 'name' || h === 'description' || h === 'category' ? 30 : undefined,
+    }));
+    const example = ['SKU-0001', '6190000000011', 'Olive oil 1L', 'Extra virgin', 'Food › Oils', 'PCS', 'VAT 19%', '12.50', '5', 'yes'];
+    return xlsxFile(await toXlsx('Products', columns, [example]), 'products-template.xlsx');
+  }
+
   @Get('export')
   @RequirePermissions('inventory.product.read')
-  @Header('Content-Type', 'text/csv; charset=utf-8')
-  @Header('Content-Disposition', 'attachment; filename="products.csv"')
-  @ApiOperation({ summary: 'Download the products matching the list filters as CSV' })
-  exportCsv(@Query() query: ListProductsQueryDto, @CurrentUser() user: RequestUser) {
-    return this.transferService.exportCsv(query, user);
+  @ApiOperation({ summary: 'Download the products matching the list filters as Excel (.xlsx)' })
+  async exportXlsx(@Query() query: ListProductsQueryDto, @CurrentUser() user: RequestUser) {
+    const { columns, rows } = await this.transferService.exportRows(query, user);
+    return xlsxFile(await toXlsx('Products', columns, rows), 'products.xlsx');
   }
 
   @Post('bulk')
@@ -191,14 +205,14 @@ export class ProductsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody(FILE_BODY)
   @ApiOperation({
-    summary: 'Import products from CSV, matched by SKU. dryRun=true (default) only previews.',
+    summary: 'Import products from Excel (.xlsx, or .csv), matched by SKU. dryRun=true (default) only previews.',
   })
-  import(
+  async import(
     @Query() query: ImportQueryDto,
     @UploadedFile() file: UploadedFileData | undefined,
     @CurrentUser() user: RequestUser,
   ) {
-    if (!file) throw new BadRequestException('Attach a CSV file in the "file" field');
-    return this.transferService.importCsv(file.buffer.toString('utf8'), query.dryRun, user);
+    if (!file) throw new BadRequestException('Attach an Excel (.xlsx) file in the "file" field');
+    return this.transferService.importTable(await readTable(file), query.dryRun, user);
   }
 }
